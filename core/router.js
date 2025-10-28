@@ -1,9 +1,11 @@
 import { renderDashboard } from "../pages/dashboard.html.js";
 import { renderImport } from "../pages/import.html.js";
+import { renderUsers } from "../pages/users.html.js";   // ← 追加
 
 const routes = {
   "/dashboard": renderDashboard,
   "/import": renderImport,
+  "/users": renderUsers,          // ← 追加
 };
 
 export function boot(){

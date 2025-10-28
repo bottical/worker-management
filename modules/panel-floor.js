@@ -2,7 +2,7 @@ import { createAssignment, endAssignment, updateAssignmentArea } from "../api/fi
 import { toast } from "../core/ui.js";
 
 /**
- * 右側のエリアパネルを生成
+ * 右側のエリアパネルを生成（配置画面）
  * @param mount DOM
  * @param site { siteId, floorId }
  * @param workerMap Map<workerId, {name, defaultStartTime?, defaultEndTime?}>
@@ -24,6 +24,32 @@ export function makeFloor(mount, site, workerMap = new Map()){
 
   // 画面上の配置状況
   const placed = new Map();
+
+  // 開始-終了を「【9-18】」に整形
+  function fmtRange(s, e){
+    const norm = (t)=> (t||"").toString().trim();
+    const toLabel=(t)=>{
+      if(!t) return "";
+      const m = String(t).match(/^(\d{1,2})(?::?(\d{2}))?$/); // "9"|"09"|"09:00"|"0900"
+      if(!m) return t;
+      const hh = String(parseInt(m[1],10));
+      const mm = (m[2]||"00");
+      return (mm==="00") ? hh : `${hh}:${mm}`;
+    };
+    const a = toLabel(norm(s)), b = toLabel(norm(e));
+    if(!a && !b) return "";
+    if(a && b) return `【${a}-${b}】`;
+    return `【${a||b}】`;
+  }
+
+  function getWorkerInfo(workerId){
+    const w = workerMap.get(workerId) || {};
+    return {
+      name: w.name || workerId,
+      start: w.defaultStartTime,
+      end: w.defaultEndTime
+    };
+  }
 
   // ドラッグ受け入れ
   mount.querySelectorAll(".zone").forEach(zone => {
@@ -74,31 +100,6 @@ export function makeFloor(mount, site, workerMap = new Map()){
       }
     });
   });
-
-  function fmtRange(s, e){
-    const norm = (t)=> (t||"").toString().trim();
-    const toLabel=(t)=>{
-      if(!t) return "";
-      const m = String(t).match(/^(\d{1,2})(?::?(\d{2}))?$/);
-      if(!m) return t;
-      const hh = String(parseInt(m[1],10));
-      const mm = (m[2]||"00");
-      return (mm==="00") ? hh : `${hh}:${mm}`;
-    };
-    const a = toLabel(norm(s)), b = toLabel(norm(e));
-    if(!a && !b) return "";
-    if(a && b) return `【${a}-${b}】`;
-    return `【${a||b}】`;
-  }
-
-  function getWorkerInfo(workerId){
-    const w = workerMap.get(workerId) || {};
-    return {
-      name: w.name || workerId,
-      start: w.defaultStartTime,
-      end: w.defaultEndTime
-    };
-  }
 
   // スロット（配置済みカード）を追加（クリックOUT／ドラッグ移動可能）
   function addSlot(dropEl, workerId, areaId, assignmentId){

@@ -15,7 +15,8 @@ export function renderUsers(mount){
       <label>雇用区分<input name="employmentType" placeholder="派遣/正社員など"></label>
       <label>派遣元<input name="agency" placeholder="派遣会社名"></label>
       <label>スキル（カンマ区切り）<input name="skills" placeholder="検品,梱包"></label>
-      <label>終了時刻<input name="defaultEndTime" placeholder="18:00"></label>
+      <label>開始時間<input name="defaultStartTime" id="defaultStartTime" type="time" placeholder="09:00"></label>
+      <label>終了時間<input name="defaultEndTime"   id="defaultEndTime"   type="time" placeholder="18:00"></label>
       <label>有効
         <select name="active">
           <option value="true" selected>有効</option>

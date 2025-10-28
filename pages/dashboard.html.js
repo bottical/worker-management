@@ -32,11 +32,16 @@ export function renderDashboard(mount){
       countEl.textContent = document.querySelectorAll(".card[data-in-pool='1']").length;
     });
   };
+  // 初期描画：全員を未配置に
   drawPool(workers);
 
   // 右：エリア（名前・時間の解決用 Map）
   const workerMap = new Map(
-    workers.map(w => [w.workerId, { name: (w.name || w.workerId), defaultStartTime: w.defaultStartTime, defaultEndTime: w.defaultEndTime }])
+    workers.map(w => [w.workerId, {
+      name: (w.name || w.workerId),
+      defaultStartTime: w.defaultStartTime,
+      defaultEndTime: w.defaultEndTime
+    }])
   );
   const floorEl = wrap.querySelector("#floor");
   const unmount = makeFloor(floorEl, state.site, workerMap);
@@ -46,7 +51,7 @@ export function renderDashboard(mount){
     // rows: [{id, siteId, floorId, areaId, workerId, inAt, ...}]
     window.__floorRender?.updateFromAssignments(rows);
 
-    // OUT→未配置へ戻す（= 在席中以外をプールに再描画）
+    // OUT → 未配置へ戻す（= 在席中以外をプールに再描画）
     const assigned = new Set(rows.map(r => r.workerId));
     const notAssigned = workers.filter(w => !assigned.has(w.workerId));
     drawPool(notAssigned);

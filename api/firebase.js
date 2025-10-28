@@ -84,6 +84,7 @@ export async function upsertWorker(worker){
     skills: Array.isArray(worker.skills)
       ? worker.skills
       : (worker.skills||"").split(",").map(s=>s.trim()).filter(Boolean),
+    defaultStartTime: worker.defaultStartTime || "",   // ← 追加
     defaultEndTime: worker.defaultEndTime || "",
     active: worker.active === true || worker.active === "true" || worker.active === "on",
     panel: {
@@ -97,6 +98,7 @@ export async function upsertWorker(worker){
   await setDoc(ref, payload, { merge: true });
   return id;
 }
+
 
 export async function removeWorker(workerId){
   await deleteDoc(doc(db, "workers", workerId));

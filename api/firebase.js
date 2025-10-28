@@ -17,7 +17,7 @@ export const db = getFirestore(app);
 export async function createAssignment({ siteId, floorId, areaId, workerId }){
   const ref = await addDoc(collection(db, "assignments"), {
     siteId, floorId, areaId, workerId,
-    date: new Date().toISOString().slice(0,10), // 厳密運用では dayjs等推奨
+    date: new Date().toISOString().slice(0,10),
     inAt: serverTimestamp(),
     outAt: null,
     createdAt: serverTimestamp(),
@@ -31,6 +31,15 @@ export async function endAssignment({ assignmentId }){
   const ref = doc(db, "assignments", assignmentId);
   await updateDoc(ref, {
     outAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** エリア間の異動（配置済みをドラッグ移動） */
+export async function updateAssignmentArea({ assignmentId, areaId }){
+  const ref = doc(db, "assignments", assignmentId);
+  await updateDoc(ref, {
+    areaId,
     updatedAt: serverTimestamp(),
   });
 }
@@ -54,7 +63,6 @@ export function subscribeAssignments({ siteId, floorId }, cb){
  * workers（作業者マスタ）API
  * ========================= */
 
-/** 一覧購読（名前昇順） */
 export function subscribeWorkers(cb){
   const col = collection(db, "workers");
   const q1 = query(col, orderBy("name", "asc"));
@@ -64,9 +72,8 @@ export function subscribeWorkers(cb){
   });
 }
 
-/** 追加 or 更新（workerIdをドキュメントIDに） */
 export async function upsertWorker(worker){
-  const id = worker.workerId; // 既定：workerIdが主キー
+  const id = worker.workerId;
   const ref = doc(db, "workers", id);
   const payload = {
     workerId: id,
@@ -77,7 +84,7 @@ export async function upsertWorker(worker){
     skills: Array.isArray(worker.skills)
       ? worker.skills
       : (worker.skills||"").split(",").map(s=>s.trim()).filter(Boolean),
-    defaultEndTime: worker.defaultEndTime || "", // "18:00" 等
+    defaultEndTime: worker.defaultEndTime || "",
     active: worker.active === true || worker.active === "true" || worker.active === "on",
     panel: {
       color: (worker.panel?.color || worker.panelColor || "") || "",
@@ -91,7 +98,6 @@ export async function upsertWorker(worker){
   return id;
 }
 
-/** 削除 */
 export async function removeWorker(workerId){
   await deleteDoc(doc(db, "workers", workerId));
 }

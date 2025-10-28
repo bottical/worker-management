@@ -19,21 +19,26 @@ export function renderDashboard(mount){
   `;
   mount.appendChild(wrap);
 
+  // workers = [{ workerId, name }]
+  const workers = Array.isArray(state.workers)
+    ? state.workers.map(w => typeof w === "string" ? ({ workerId: w, name: w }) : w)
+    : [];
+
   // 左：未配置
   const poolEl = wrap.querySelector("#pool");
   const countEl = wrap.querySelector("#count");
-  makePool(poolEl, state.workers, () => {
+  makePool(poolEl, workers, () => {
     countEl.textContent = document.querySelectorAll(".card[data-in-pool='1']").length;
   });
 
-  // 右：エリア
+  // 右：エリア（名前解決用の Map を渡す）
+  const workerMap = new Map(workers.map(w => [w.workerId, w.name || w.workerId]));
   const floorEl = wrap.querySelector("#floor");
-  const unmount = makeFloor(floorEl, state.site);
+  const unmount = makeFloor(floorEl, state.site, workerMap);
 
   // Firestore購読（在籍中のみを描画側に通知）
   const unsub = subscribeAssignments(state.site, (rows) => {
     // rows: [{id, siteId, floorId, areaId, workerId, inAt, ...}]
-    // 右側エリアへ反映（モジュールの公開APIへ通知）
     window.__floorRender?.updateFromAssignments(rows);
   });
 

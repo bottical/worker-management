@@ -27,7 +27,8 @@ export function makePool(mount, ids = [], onChange){
     el.appendChild(av); el.appendChild(main);
 
     el.addEventListener("dragstart", e => {
-      e.dataTransfer.setData("text/plain", workerId);
+      const payload = JSON.stringify({ type:"pool", workerId });
+      e.dataTransfer.setData("text/plain", payload);
       e.dataTransfer.effectAllowed = "move";
       el.classList.add("dragging");
     });

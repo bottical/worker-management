@@ -19,20 +19,25 @@ export function renderDashboard(mount){
   `;
   mount.appendChild(wrap);
 
-  // workers = [{ workerId, name }]
+  // workers = [{ workerId, name, defaultStartTime?, defaultEndTime? }]
   const workers = Array.isArray(state.workers)
     ? state.workers.map(w => typeof w === "string" ? ({ workerId: w, name: w }) : w)
     : [];
 
-  // 左：未配置
+  // 左：未配置（購読で上書きできるように関数化）
   const poolEl = wrap.querySelector("#pool");
   const countEl = wrap.querySelector("#count");
-  makePool(poolEl, workers, () => {
-    countEl.textContent = document.querySelectorAll(".card[data-in-pool='1']").length;
-  });
+  const drawPool = (list)=> {
+    makePool(poolEl, list, () => {
+      countEl.textContent = document.querySelectorAll(".card[data-in-pool='1']").length;
+    });
+  };
+  drawPool(workers);
 
-  // 右：エリア（名前解決用の Map を渡す）
-  const workerMap = new Map(workers.map(w => [w.workerId, w.name || w.workerId]));
+  // 右：エリア（名前・時間の解決用 Map）
+  const workerMap = new Map(
+    workers.map(w => [w.workerId, { name: (w.name || w.workerId), defaultStartTime: w.defaultStartTime, defaultEndTime: w.defaultEndTime }])
+  );
   const floorEl = wrap.querySelector("#floor");
   const unmount = makeFloor(floorEl, state.site, workerMap);
 
@@ -40,6 +45,11 @@ export function renderDashboard(mount){
   const unsub = subscribeAssignments(state.site, (rows) => {
     // rows: [{id, siteId, floorId, areaId, workerId, inAt, ...}]
     window.__floorRender?.updateFromAssignments(rows);
+
+    // OUT→未配置へ戻す（= 在席中以外をプールに再描画）
+    const assigned = new Set(rows.map(r => r.workerId));
+    const notAssigned = workers.filter(w => !assigned.has(w.workerId));
+    drawPool(notAssigned);
   });
 
   // ページ離脱時クリーンアップ

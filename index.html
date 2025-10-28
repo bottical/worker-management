@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>在籍管理</title>
+  <link rel="stylesheet" href="./assets/css/base.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">在籍管理</div>
+    <nav class="nav">
+      <a href="#/dashboard">配置</a>
+      <a href="#/import">取込</a>
+    </nav>
+  </header>
+  <main id="app"></main>
+
+  <!-- ES Modules -->
+  <script type="module">
+    import { boot } from "./core/router.js";
+    boot();
+  </script>
+</body>
+</html>

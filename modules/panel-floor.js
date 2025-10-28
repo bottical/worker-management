@@ -5,9 +5,10 @@ import { toast } from "../core/ui.js";
  * 右側のエリアパネルを生成
  * @param mount DOM
  * @param site { siteId, floorId }
+ * @param workerMap Map<workerId, name> ← 追加
  * @returns unmount()
  */
-export function makeFloor(mount, site){
+export function makeFloor(mount, site, workerMap = new Map()){
   mount.innerHTML = `
     <div class="zones">
       <section class="zone" data-zone="A">
@@ -21,10 +22,8 @@ export function makeFloor(mount, site){
     </div>
   `;
 
-  // 現在画面上に存在する workerId -> { zone, assignmentId }
   const placed = new Map();
 
-  // ドラッグ受け入れ（プール→配置 / 配置→別エリア）
   mount.querySelectorAll(".zone").forEach(zone => {
     zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
     zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
@@ -32,78 +31,72 @@ export function makeFloor(mount, site){
       e.preventDefault(); zone.classList.remove("dragover");
       const payload = e.dataTransfer.getData("text/plain");
       if (!payload) return;
-
       let data;
-      try { data = JSON.parse(payload); } catch { data = { type:"pool", workerId: payload }; }
+      try { data = JSON.parse(payload); } catch { return; }
 
       const areaId = zone.dataset.zone;
 
-      // 1) プール→配置（新規IN）
+      // 新規IN
       if (data.type === "pool") {
         const workerId = data.workerId;
+        const name = data.name || workerMap.get(workerId) || workerId;
         if (placed.has(workerId)) {
-          toast(`重複配置は不可（${workerId} は ${placed.get(workerId).zone} 済）`, "error");
+          toast(`重複配置は不可（${name} は ${placed.get(workerId).zone} 済）`, "error");
           return;
         }
-        try{
+        try {
           const assignmentId = await createAssignment({ siteId: site.siteId, floorId: site.floorId, areaId, workerId });
           placed.set(workerId, { zone: `エリア${areaId}`, assignmentId });
-          addSlot(zone.querySelector(".droparea"), workerId, areaId, assignmentId);
-          // プール側カードを消す
-          const card = document.querySelector(`.card[data-worker-id="${CSS.escape(workerId)}"][data-in-pool="1"]`);
-          card?.remove();
-        }catch(e){ console.error(e); toast("保存に失敗しました","error"); }
+          addSlot(zone.querySelector(".droparea"), workerId, name, areaId, assignmentId);
+          document.querySelector(`.card[data-worker-id="${CSS.escape(workerId)}"][data-in-pool="1"]`)?.remove();
+        } catch (e) {
+          console.error(e); toast("保存に失敗しました","error");
+        }
         return;
       }
 
-      // 2) 配置済み→別エリアへ移動
+      // 配置済み→別エリア
       if (data.type === "placed") {
         const { workerId, assignmentId, fromAreaId } = data;
-        if (fromAreaId === areaId) return; // 同じエリアなら何もしない
-        try{
+        if (fromAreaId === areaId) return;
+        try {
           await updateAssignmentArea({ assignmentId, areaId });
-          // UIは購読で再構築されるが、即時反映したいので軽く置換
+          const name = workerMap.get(workerId) || workerId;
           placed.set(workerId, { zone: `エリア${areaId}`, assignmentId });
-          addSlot(zone.querySelector(".droparea"), workerId, areaId, assignmentId);
-          // 元のスロットを削除
-          const old = document.querySelector(`.slot [data-assignment-id="${assignmentId}"]`)?.closest(".slot");
-          old?.remove();
-        }catch(e){ console.error(e); toast("移動に失敗しました","error"); }
-        return;
+          addSlot(zone.querySelector(".droparea"), workerId, name, areaId, assignmentId);
+          document.querySelector(`.slot [data-assignment-id="${assignmentId}"]`)?.closest(".slot")?.remove();
+        } catch (e) {
+          console.error(e); toast("移動に失敗しました","error");
+        }
       }
     });
   });
 
-  // スロット（配置済みカード）を追加（クリックOUT／ドラッグ移動可能）
-  function addSlot(dropEl, workerId, areaId, assignmentId){
+  // スロット追加
+  function addSlot(dropEl, workerId, name, areaId, assignmentId){
     const slot = document.createElement("div");
     slot.className = "slot";
     slot.innerHTML = `
       <div class="card" draggable="true" data-type="placed"
            data-assignment-id="${assignmentId}" data-worker-id="${workerId}" data-area-id="${areaId}">
-        <div class="avatar">${workerId.slice(0,1).toUpperCase()}</div>
+        <div class="avatar">${name.charAt(0)}</div>
         <div>
-          <div class="mono">${workerId}</div>
+          <div class="mono">${name}</div>
           <div class="hint">配置：エリア${areaId}（クリックでOUT）</div>
         </div>
       </div>
     `;
     const card = slot.querySelector(".card");
 
-    // クリック＝OUT
-    card.addEventListener("click", async (ev)=>{
-      // ドラッグ開始のクリックと誤爆しないように、小さな遅延判断でもOKだが最小実装ではそのまま
-      if (ev.defaultPrevented) return;
-      const ok = confirm(`${workerId} をOUT（退場）しますか？`);
+    card.addEventListener("click", async ()=>{
+      const ok = confirm(`${name} をOUTしますか？`);
       if(!ok) return;
-      try{
+      try {
         await endAssignment({ assignmentId });
-        toast(`${workerId} をOUTしました`);
-        // 購読でUI更新
-      }catch(e){ console.error(e); toast("OUTに失敗しました","error"); }
+        toast(`${name} をOUTしました`);
+      } catch(e){ console.error(e); toast("OUTに失敗しました","error"); }
     });
 
-    // ドラッグ＝別エリアへ移動
     card.addEventListener("dragstart", e => {
       const payload = JSON.stringify({ type:"placed", workerId, assignmentId, fromAreaId: areaId });
       e.dataTransfer.setData("text/plain", payload);
@@ -115,19 +108,17 @@ export function makeFloor(mount, site){
     dropEl.appendChild(slot);
   }
 
-  // Firestore購読から呼ばれる更新フック（外部公開）
   window.__floorRender = {
     updateFromAssignments(rows){
       mount.querySelectorAll(".droparea").forEach(d => d.innerHTML = "");
       placed.clear();
       for(const r of rows){
+        const name = workerMap.get(r.workerId) || r.workerId;
         const zone = mount.querySelector(`.zone[data-zone="${r.areaId}"] .droparea`);
         if (zone) {
           placed.set(r.workerId, { zone: `エリア${r.areaId}`, assignmentId: r.id });
-          addSlot(zone, r.workerId, r.areaId, r.id);
-          // プールのカードがあれば削除
-          const card = document.querySelector(`.card[data-worker-id="${CSS.escape(r.workerId)}"][data-in-pool="1"]`);
-          card?.remove();
+          addSlot(zone, r.workerId, name, r.areaId, r.id);
+          document.querySelector(`.card[data-worker-id="${CSS.escape(r.workerId)}"][data-in-pool="1"]`)?.remove();
         }
       }
     }

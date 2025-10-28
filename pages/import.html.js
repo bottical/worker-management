@@ -52,7 +52,7 @@ export function renderImport(mount){
         newOrUpdated++;
       }
 
-      set({ sheetId, dateTab: dateStr, idColumn: col, hasHeader, workers: ids });
+      set({ sheetId, dateTab: dateStr, idColumn: col, hasHeader, workers: pairs });
       box.querySelector("#result").textContent = `取り込み成功：${ids.length}名（upsert: ${newOrUpdated}件）`;
       toast(`取り込み成功：${ids.length}名（upsert: ${newOrUpdated}件）`);
       location.hash = "#/dashboard";

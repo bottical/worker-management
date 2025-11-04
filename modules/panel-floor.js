@@ -21,6 +21,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   let _readOnly = false;
   let currentAssignments = [];
   let currentSite = { ...site };
+  let fallbackZoneEl = null;
 
   mount.innerHTML = "";
   const zonesEl = document.createElement("div");
@@ -106,75 +107,81 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   }
 
   // ドロップターゲット（エリア）
-  function bindDropzones() {
-    zonesEl.querySelectorAll(".droparea").forEach((drop) => {
-      const zone = drop.closest(".zone");
-      drop.addEventListener("dragover", (e) => {
-        if (_readOnly) return;
+  function setupDropzone(drop) {
+    if (!drop || drop.dataset.bound === "true") return;
+    drop.dataset.bound = "true";
+    const zone = drop.closest(".zone");
+    drop.addEventListener("dragover", (e) => {
+      if (_readOnly) return;
+      e.preventDefault();
+      zone?.classList.add("dragover");
+    });
+    drop.addEventListener("dragleave", () => {
+      zone?.classList.remove("dragover");
+    });
+    drop.addEventListener("drop", async (e) => {
+      zone?.classList.remove("dragover");
+      if (_readOnly) {
         e.preventDefault();
-        zone?.classList.add("dragover");
-      });
-      drop.addEventListener("dragleave", () => {
-        zone?.classList.remove("dragover");
-      });
-      drop.addEventListener("drop", async (e) => {
-        zone?.classList.remove("dragover");
-        if (_readOnly) {
-          e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      const type = e.dataTransfer.getData("type");
+      const areaId = drop.dataset.areaId;
+      const isFallback = drop.dataset.fallback === "true";
+      if (!currentSite?.userId || !currentSite?.siteId) {
+        console.warn("drop skipped: missing user/site context");
+        return;
+      }
+      if (type === "pool") {
+        if (isFallback) {
+          console.warn("createAssignment skipped: fallback zone is read-only for pool drops");
           return;
         }
-        e.preventDefault();
-        const type = e.dataTransfer.getData("type");
-        const areaId = drop.dataset.areaId;
-        const isFallback = drop.dataset.fallback === "true";
-        if (!currentSite?.userId || !currentSite?.siteId) {
-          console.warn("drop skipped: missing user/site context");
-          return;
+        // 未配置 → IN
+        const workerId = e.dataTransfer.getData("workerId");
+        try {
+          await createAssignment({
+            userId: currentSite.userId,
+            siteId: currentSite.siteId,
+            floorId: currentSite.floorId,
+            areaId,
+            workerId
+          });
+        } catch (err) {
+          console.warn("createAssignment failed", err);
         }
-        if (type === "pool") {
+      } else if (type === "placed") {
+        const assignmentId = e.dataTransfer.getData("assignmentId");
+        const workerId = e.dataTransfer.getData("workerId");
+        const from = e.dataTransfer.getData("fromAreaId");
+        if (from === areaId) return; // 同一エリアなら何もしない
+        try {
           if (isFallback) {
-            console.warn("createAssignment skipped: fallback zone is read-only for pool drops");
-            return;
-          }
-          // 未配置 → IN
-          const workerId = e.dataTransfer.getData("workerId");
-          try {
-            await createAssignment({
+            await updateAssignmentArea({
               userId: currentSite.userId,
               siteId: currentSite.siteId,
-              floorId: currentSite.floorId,
-              areaId,
-              workerId
+              assignmentId,
+              areaId: FALLBACK_AREA_ID
             });
-          } catch (err) {
-            console.warn("createAssignment failed", err);
+          } else {
+            await updateAssignmentArea({
+              userId: currentSite.userId,
+              siteId: currentSite.siteId,
+              assignmentId,
+              areaId
+            });
           }
-        } else if (type === "placed") {
-          const assignmentId = e.dataTransfer.getData("assignmentId");
-          const workerId = e.dataTransfer.getData("workerId");
-          const from = e.dataTransfer.getData("fromAreaId");
-          if (from === areaId) return; // 同一エリアなら何もしない
-          try {
-            if (isFallback) {
-              await updateAssignmentArea({
-                userId: currentSite.userId,
-                siteId: currentSite.siteId,
-                assignmentId,
-                areaId: FALLBACK_AREA_ID
-              });
-            } else {
-              await updateAssignmentArea({
-                userId: currentSite.userId,
-                siteId: currentSite.siteId,
-                assignmentId,
-                areaId
-              });
-            }
-          } catch (err) {
-            console.warn("updateAssignmentArea failed", err);
-          }
+        } catch (err) {
+          console.warn("updateAssignmentArea failed", err);
         }
-      });
+      }
+    });
+  }
+
+  function bindDropzones() {
+    zonesEl.querySelectorAll(".droparea").forEach((drop) => {
+      setupDropzone(drop);
     });
   }
 
@@ -186,20 +193,35 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
 
   function renderAssignments() {
     zonesEl.querySelectorAll(".droparea").forEach((d) => (d.innerHTML = ""));
-    const fallbackDrop = zonesEl.querySelector(
-      `.droparea[data-area-id="${FALLBACK_AREA_ID}"]`
-    );
+    let fallbackDrop = fallbackZoneEl
+      ? fallbackZoneEl.querySelector(
+          `.droparea[data-area-id="${FALLBACK_AREA_ID}"]`
+        )
+      : null;
+    if (fallbackDrop) fallbackDrop.innerHTML = "";
+    let hasFallbackAssignments = false;
     currentAssignments.forEach((r) => {
-      const targetAreaId = r.areaId || FALLBACK_AREA_ID;
-      const drop = zonesEl.querySelector(
+      let targetAreaId = r.areaId || FALLBACK_AREA_ID;
+      let drop = zonesEl.querySelector(
         `.droparea[data-area-id="${targetAreaId}"]`
       );
+      if (!drop) {
+        targetAreaId = FALLBACK_AREA_ID;
+      }
+      if (targetAreaId === FALLBACK_AREA_ID) {
+        if (!fallbackDrop) {
+          fallbackDrop = ensureFallbackZone();
+        }
+        drop = fallbackDrop;
+        hasFallbackAssignments = true;
+      }
       if (drop) {
         addSlot(drop, r.workerId, targetAreaId, r.id);
-      } else if (fallbackDrop) {
-        addSlot(fallbackDrop, r.workerId, FALLBACK_AREA_ID, r.id);
       }
     });
+    if (!hasFallbackAssignments) {
+      removeFallbackZone();
+    }
   }
 
   // 外部（Dashboard）から呼ばれる：workerMapを差し替え→色・時間・表示を更新
@@ -257,6 +279,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
 
   function renderZones() {
     zonesEl.innerHTML = "";
+    fallbackZoneEl = null;
     _areas.forEach((area) => {
       const zone = document.createElement("div");
       zone.className = "zone";
@@ -270,20 +293,47 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       zone.appendChild(drop);
       zonesEl.appendChild(zone);
     });
-    // 未割当ゾーン（エリアが削除された作業者の避難場所）
-    const fallbackZone = document.createElement("div");
-    fallbackZone.className = "zone fallback";
-    fallbackZone.dataset.areaId = FALLBACK_AREA_ID;
-    const fallbackTitle = document.createElement("h3");
-    fallbackTitle.textContent = FALLBACK_AREA_LABEL;
-    const fallbackDrop = document.createElement("div");
-    fallbackDrop.className = "droparea";
-    fallbackDrop.dataset.areaId = FALLBACK_AREA_ID;
-    fallbackDrop.dataset.fallback = "true";
-    fallbackZone.appendChild(fallbackTitle);
-    fallbackZone.appendChild(fallbackDrop);
-    zonesEl.appendChild(fallbackZone);
     bindDropzones();
+  }
+
+  function ensureFallbackZone() {
+    if (fallbackZoneEl) {
+      const drop = fallbackZoneEl.querySelector(
+        `.droparea[data-area-id="${FALLBACK_AREA_ID}"]`
+      );
+      if (drop) {
+        drop.innerHTML = "";
+        setupDropzone(drop);
+        return drop;
+      }
+    }
+    const zone = document.createElement("div");
+    zone.className = "zone fallback";
+    zone.dataset.areaId = FALLBACK_AREA_ID;
+    const title = document.createElement("h3");
+    title.textContent = FALLBACK_AREA_LABEL;
+    const drop = document.createElement("div");
+    drop.className = "droparea";
+    drop.dataset.areaId = FALLBACK_AREA_ID;
+    drop.dataset.fallback = "true";
+    zone.appendChild(title);
+    zone.appendChild(drop);
+    zonesEl.appendChild(zone);
+    fallbackZoneEl = zone;
+    setupDropzone(drop);
+    return drop;
+  }
+
+  function removeFallbackZone() {
+    if (!fallbackZoneEl) return;
+    const drop = fallbackZoneEl.querySelector(".droparea");
+    if (drop) {
+      drop.innerHTML = "";
+    }
+    if (fallbackZoneEl.parentNode) {
+      fallbackZoneEl.parentNode.removeChild(fallbackZoneEl);
+    }
+    fallbackZoneEl = null;
   }
 
   function normalizeAreas(list) {

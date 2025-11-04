@@ -1,164 +1,163 @@
-import { createAssignment, endAssignment, updateAssignmentArea } from "../api/firebase.js";
-import { toast } from "../core/ui.js";
+// modules/panel-floor.js
+import { createAssignment, closeAssignment } from "../api/firebase.js";
+import { fmtRange } from "../modules/ui.js";
 
 /**
- * 右側のエリアパネルを生成（配置画面）
- * @param mount DOM
- * @param site { siteId, floorId }
- * @param workerMap Map<workerId, {name, defaultStartTime?, defaultEndTime?}>
- * @returns unmount()
+ * フロア（ゾーン）側の描画と、在籍の反映を担う
+ * - workerMap を後から差し替え可能（色・時間の反映に対応）
+ * - assignments購読から updateFromAssignments(rows) が呼ばれる前提
  */
-export function makeFloor(mount, site, workerMap = new Map()){
+export function makeFloor(mount, site, workerMap = new Map()) {
+  // 内部で持つ（外部から setWorkerMap で置換可能）
+  let _workerMap = new Map(workerMap || []);
+
   mount.innerHTML = `
-    <div class="zones">
-      <section class="zone" data-zone="A">
-        <h3>エリア A（クリックでOUT／ドラッグで他エリアへ移動）</h3>
-        <div class="droparea" data-drop="A"></div>
-      </section>
-      <section class="zone" data-zone="B">
-        <h3>エリア B（クリックでOUT／ドラッグで他エリアへ移動）</h3>
-        <div class="droparea" data-drop="B"></div>
-      </section>
+    <div class="floor">
+      <div class="area" data-area-id="A">
+        <div class="area-head">エリアA</div>
+        <div class="drop" data-area-id="A"></div>
+      </div>
+      <div class="area" data-area-id="B">
+        <div class="area-head">エリアB</div>
+        <div class="drop" data-area-id="B"></div>
+      </div>
     </div>
   `;
 
-  // 画面上の配置状況
-  const placed = new Map();
-
-  // 開始-終了を「【9-18】」に整形
-  function fmtRange(s, e){
-    const norm = (t)=> (t||"").toString().trim();
-    const toLabel=(t)=>{
-      if(!t) return "";
-      const m = String(t).match(/^(\d{1,2})(?::?(\d{2}))?$/); // "9"|"09"|"09:00"|"0900"
-      if(!m) return t;
-      const hh = String(parseInt(m[1],10));
-      const mm = (m[2]||"00");
-      return (mm==="00") ? hh : `${hh}:${mm}`;
-    };
-    const a = toLabel(norm(s)), b = toLabel(norm(e));
-    if(!a && !b) return "";
-    if(a && b) return `【${a}-${b}】`;
-    return `【${a||b}】`;
-  }
-
-  function getWorkerInfo(workerId){
-    const w = workerMap.get(workerId) || {};
+  function getWorkerInfo(workerId) {
+    const w = _workerMap.get(workerId) || {};
     return {
       name: w.name || workerId,
-      start: w.defaultStartTime,
-      end: w.defaultEndTime
+      start: w.defaultStartTime || "",
+      end: w.defaultEndTime || "",
+      panelColor: w.panelColor || ""
     };
   }
 
-  // ドラッグ受け入れ
-  mount.querySelectorAll(".zone").forEach(zone => {
-    zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
-    zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
-    zone.addEventListener("drop", async e => {
-      e.preventDefault(); zone.classList.remove("dragover");
-      const payload = e.dataTransfer.getData("text/plain");
-      if (!payload) return;
-
-      let data;
-      try { data = JSON.parse(payload); } catch { return; }
-
-      const areaId = zone.dataset.zone;
-
-      // プール→配置（新規IN）
-      if (data.type === "pool") {
-        const workerId = data.workerId;
-        if (placed.has(workerId)) {
-          const info = getWorkerInfo(workerId);
-          toast(`重複配置は不可（${info.name} は ${placed.get(workerId).zone} 済）`, "error");
-          return;
-        }
-        try{
-          const assignmentId = await createAssignment({ siteId: site.siteId, floorId: site.floorId, areaId, workerId });
-          placed.set(workerId, { zone: `エリア${areaId}`, assignmentId });
-          addSlot(zone.querySelector(".droparea"), workerId, areaId, assignmentId);
-          // プール側カードを消す
-          const card = document.querySelector(`.card[data-worker-id="${CSS.escape(workerId)}"][data-in-pool="1"]`);
-          card?.remove();
-        }catch(e){ console.error(e); toast("保存に失敗しました","error"); }
-        return;
-      }
-
-      // 配置済み→別エリアへ移動
-      if (data.type === "placed") {
-        const { workerId, assignmentId, fromAreaId } = data;
-        if (fromAreaId === areaId) return; // 同じエリアなら何もしない
-        try{
-          await updateAssignmentArea({ assignmentId, areaId });
-          placed.set(workerId, { zone: `エリア${areaId}`, assignmentId });
-          addSlot(zone.querySelector(".droparea"), workerId, areaId, assignmentId);
-          // 元のスロットを削除
-          const old = document.querySelector(`.slot [data-assignment-id="${assignmentId}"]`)?.closest(".slot");
-          old?.remove();
-        }catch(e){ console.error(e); toast("移動に失敗しました","error"); }
-        return;
-      }
-    });
-  });
-
-  // スロット（配置済みカード）を追加（クリックOUT／ドラッグ移動可能）
-  function addSlot(dropEl, workerId, areaId, assignmentId){
+  function slotHtml(workerId, areaId, assignmentId) {
     const info = getWorkerInfo(workerId);
     const meta = fmtRange(info.start, info.end);
-    const slot = document.createElement("div");
-    slot.className = "slot";
-    slot.innerHTML = `
-      <div class="card" draggable="true" data-type="placed"
-           data-assignment-id="${assignmentId}" data-worker-id="${workerId}" data-area-id="${areaId}">
-        <div class="avatar">${info.name.charAt(0)}</div>
+    return `
+      <div class="card" draggable="true"
+           data-type="placed"
+           data-assignment-id="${assignmentId}"
+           data-worker-id="${workerId}"
+           data-area-id="${areaId}">
+        <div class="avatar" style="${info.panelColor ? `background:${info.panelColor}` : ""}">
+          ${info.name.charAt(0)}
+        </div>
         <div>
           <div class="mono">${info.name}${meta ? ` ${meta}` : ""}</div>
           <div class="hint">配置：エリア${areaId}（クリックでOUT）</div>
         </div>
       </div>
     `;
+  }
+
+  function addSlot(dropEl, workerId, areaId, assignmentId) {
+    const slot = document.createElement("div");
+    slot.className = "slot";
+    slot.innerHTML = slotHtml(workerId, areaId, assignmentId);
+    // クリックでOUT
+    slot.querySelector(".card").addEventListener("click", async (e) => {
+      const id = e.currentTarget.dataset.assignmentId;
+      try {
+        await closeAssignment(id);
+      } catch (err) {
+        console.warn("closeAssignment failed", err);
+      }
+    });
+    // DnD: フロア内移動（エリア間）
     const card = slot.querySelector(".card");
-
-    // クリック＝OUT
-    card.addEventListener("click", async ()=>{
-      const ok = confirm(`${info.name} をOUT（退場）しますか？`);
-      if(!ok) return;
-      try{
-        await endAssignment({ assignmentId });
-        toast(`${info.name} をOUTしました`);
-        // UIは購読で更新（未配置への戻しは Dashboard 側で再描画）
-      }catch(e){ console.error(e); toast("OUTに失敗しました","error"); }
+    card.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("type", "placed");
+      e.dataTransfer.setData("workerId", card.dataset.workerId);
+      e.dataTransfer.setData("assignmentId", card.dataset.assignmentId);
+      e.dataTransfer.setData("fromAreaId", card.dataset.areaId);
     });
-
-    // ドラッグ＝別エリアへ移動
-    card.addEventListener("dragstart", e => {
-      const payload = JSON.stringify({ type:"placed", workerId, assignmentId, fromAreaId: areaId });
-      e.dataTransfer.setData("text/plain", payload);
-      e.dataTransfer.effectAllowed = "move";
-      card.classList.add("dragging");
-    });
-    card.addEventListener("dragend", ()=> card.classList.remove("dragging"));
-
     dropEl.appendChild(slot);
   }
 
-  // Firestore購読から呼ばれる更新フック（外部公開）
-  window.__floorRender = {
-    updateFromAssignments(rows){
-      mount.querySelectorAll(".droparea").forEach(d => d.innerHTML = "");
-      placed.clear();
-      for(const r of rows){
-        const zone = mount.querySelector(`.zone[data-zone="${r.areaId}"] .droparea`);
-        if (zone) {
-          placed.set(r.workerId, { zone: `エリア${r.areaId}`, assignmentId: r.id });
-          addSlot(zone, r.workerId, r.areaId, r.id);
-          // プールのカードがあれば削除
-          const card = document.querySelector(`.card[data-worker-id="${CSS.escape(r.workerId)}"][data-in-pool="1"]`);
-          card?.remove();
+  // ドロップターゲット（エリア）
+  mount.querySelectorAll(".drop").forEach((drop) => {
+    drop.addEventListener("dragover", (e) => e.preventDefault());
+    drop.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      const type = e.dataTransfer.getData("type");
+      const areaId = drop.dataset.areaId;
+      if (type === "pool") {
+        // 未配置 → IN
+        const workerId = e.dataTransfer.getData("workerId");
+        try {
+          await createAssignment({
+            siteId: site.siteId,
+            floorId: site.floorId,
+            areaId,
+            workerId
+          });
+        } catch (err) {
+          console.warn("createAssignment failed", err);
+        }
+      } else if (type === "placed") {
+        // エリア間移動 = OUT → IN の簡易実装（サーバー側で同一workerのoutAtセット→新規作成）
+        const assignmentId = e.dataTransfer.getData("assignmentId");
+        const workerId = e.dataTransfer.getData("workerId");
+        const from = e.dataTransfer.getData("fromAreaId");
+        if (from === areaId) return; // 同一エリアなら何もしない
+        try {
+          await closeAssignment(assignmentId);
+          await createAssignment({
+            siteId: site.siteId,
+            floorId: site.floorId,
+            areaId,
+            workerId
+          });
+        } catch (err) {
+          console.warn("move (close+create) failed", err);
         }
       }
-    }
-  };
+    });
+  });
 
-  return ()=> { if (window.__floorRender) delete window.__floorRender; };
+  // 外部（Dashboard）から呼ばれる：在籍スナップショットの反映
+  function updateFromAssignments(rows) {
+    // クリアしてから再構築（シンプルな再描画）
+    mount.querySelectorAll(".drop").forEach((d) => (d.innerHTML = ""));
+    rows.forEach((r) => {
+      const drop = mount.querySelector(`.drop[data-area-id="${r.areaId}"]`);
+      if (drop) addSlot(drop, r.workerId, r.areaId, r.id);
+    });
+  }
+
+  // 外部（Dashboard）から呼ばれる：workerMapを差し替え→色・時間・表示を更新
+  function setWorkerMap(map) {
+    _workerMap = new Map(map || []);
+    // 既存スロットの見た目を更新
+    mount.querySelectorAll(".slot .card").forEach((card) => {
+      const workerId = card.dataset.workerId;
+      const areaId = card.dataset.areaId;
+      const info = getWorkerInfo(workerId);
+      const av = card.querySelector(".avatar");
+      if (av) {
+        av.style.background = info.panelColor || "";
+        av.textContent = info.name.charAt(0);
+      }
+      const title = card.querySelector(".mono");
+      if (title) {
+        const meta = fmtRange(info.start, info.end);
+        title.textContent = `${info.name}${meta ? ` ${meta}` : ""}`;
+      }
+      const hint = card.querySelector(".hint");
+      if (hint) hint.textContent = `配置：エリア${areaId}（クリックでOUT）`;
+    });
+  }
+
+  // グローバルフック（既存実装がこれを呼ぶ）
+  window.__floorRender = { updateFromAssignments, setWorkerMap };
+
+  // アンマウント
+  return () => {
+    if (window.__floorRender) delete window.__floorRender;
+    mount.innerHTML = "";
+  };
 }

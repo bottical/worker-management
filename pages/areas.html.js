@@ -263,10 +263,10 @@ export function renderAreas(mount) {
     try {
       unsubAreas();
     } catch {}
+    areas = [];
+    renderAreaRows();
+    updateFloorHint();
     if (!currentFloorId) {
-      areas = [];
-      renderAreaRows();
-      updateFloorHint();
       return;
     }
     unsubAreas = subscribeAreas(
@@ -286,7 +286,6 @@ export function renderAreas(mount) {
         renderAreaRows();
       }
     );
-    updateFloorHint();
   }
 
   function switchFloor(nextFloorId) {

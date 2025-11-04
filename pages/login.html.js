@@ -1,4 +1,10 @@
-import { loginWithEmailPassword, logout, onAuthState, subscribeSites } from "../api/firebase.js";
+import {
+  ensureDefaultSiteForUser,
+  loginWithEmailPassword,
+  logout,
+  onAuthState,
+  subscribeSites
+} from "../api/firebase.js";
 import { set, state } from "../core/store.js";
 import { toast } from "../core/ui.js";
 
@@ -80,6 +86,11 @@ export function attachSiteSubscription() {
     }
     const uid = user.uid;
     set({ user: { uid, email: user.email || "", displayName: user.displayName || "" } });
+    try {
+      await ensureDefaultSiteForUser(uid);
+    } catch (err) {
+      console.error("ensureDefaultSiteForUser failed", err);
+    }
     unsubscribe = subscribeSites(uid, (sites) => {
       set({ sites });
       const current = state.site?.siteId;

@@ -96,7 +96,8 @@ export function renderUsers(mount){
         form.employmentType.value = row.employmentType||"";
         form.agency.value = row.agency||"";
         form.skills.value = (row.skills||[]).join(", ");
-        form.defaultEndTime.value = row.defaultEndTime||"";
+        form.defaultStartTime.value = row.defaultStartTime || "";
+        form.defaultEndTime.value = row.defaultEndTime || "";
         form.active.value = row.active ? "true" : "false";
         form.panelColor.value = row.panel?.color || "";
         form.badges.value = (row.panel?.badges||[]).join(", ");

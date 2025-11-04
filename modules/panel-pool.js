@@ -1,80 +1,54 @@
-import { toast } from "../core/ui.js";
+// modules/panel-pool.js
+import { fmtRange } from "../modules/ui.js";
+
+export function makePool(mount, site) {
+  // noop（現状siteは未使用だが将来用）
+  return () => {};
+}
 
 /**
- * プール（未配置リスト）
- * @param mount DOM要素
- * @param workers [{ workerId, name, defaultStartTime?, defaultEndTime? }]
- * @param onChange コールバック
+ * 未配置（プール）の描画
+ * @param {HTMLElement} container
+ * @param {Array} workers - [{workerId,name,defaultStartTime,defaultEndTime,panel:{color}}]
  */
-export function makePool(mount, workers = [], onChange){
-  mount.innerHTML = "";
-  workers.forEach(w => mount.appendChild(card(w)));
-  onChange?.();
+export function drawPool(container, workers = []) {
+  container.innerHTML = "";
+  workers.forEach((w) => container.appendChild(card(w)));
+}
 
-  function fmtRange(s, e){
-    const norm = (t)=> (t||"").toString().trim();
-    const toLabel=(t)=>{
-      if(!t) return "";
-      const m = String(t).match(/^(\d{1,2})(?::?(\d{2}))?$/); // "9"|"09"|"09:00"|"0900"
-      if(!m) return t;
-      const hh = String(parseInt(m[1],10));
-      const mm = (m[2]||"00");
-      return (mm==="00") ? hh : `${hh}:${mm}`;
-    };
-    const a = toLabel(norm(s)), b = toLabel(norm(e));
-    if(!a && !b) return "";
-    if(a && b) return `【${a}-${b}】`;
-    return `【${a||b}】`;
-  }
+function card(worker) {
+  const el = document.createElement("div");
+  el.className = "card";
+  el.setAttribute("draggable", "true");
+  el.dataset.type = "pool";
+  el.dataset.workerId = worker.workerId;
 
-  function card(worker){
-    const el = document.createElement("div");
-    el.className = "card";
-    el.draggable = true;
-    el.dataset.workerId = worker.workerId;
-    el.dataset.inPool = "1";
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.textContent = (worker.name || worker.workerId || "?").charAt(0);
+  if (worker.panel?.color) av.style.background = worker.panel.color;
 
-    const av = document.createElement("div");
-    av.className = "avatar";
-    av.textContent = (worker.name?.charAt(0) || "？");
+  const title = document.createElement("div");
+  title.className = "mono";
+  const meta = fmtRange(worker.defaultStartTime, worker.defaultEndTime);
+  title.textContent = `${worker.name || worker.workerId}${meta ? ` ${meta}` : ""}`;
 
-    const main = document.createElement("div");
-    const title = document.createElement("div");
-    title.className = "mono";
-    const meta = fmtRange(worker.defaultStartTime, worker.defaultEndTime);
-    title.textContent = (worker.name || worker.workerId) + (meta ? ` ${meta}` : "");
-    const sub = document.createElement("div");
-    sub.className = "hint";
-    sub.textContent = "未配置";
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = "ドラッグで配置（IN）";
 
-    main.appendChild(title);
-    main.appendChild(sub);
-    el.appendChild(av);
-    el.appendChild(main);
+  const right = document.createElement("div");
+  right.appendChild(title);
+  right.appendChild(hint);
 
-    el.addEventListener("dragstart", e => {
-      const payload = JSON.stringify({
-        type: "pool",
-        workerId: worker.workerId,
-        name: worker.name,
-        defaultStartTime: worker.defaultStartTime,
-        defaultEndTime: worker.defaultEndTime
-      });
-      e.dataTransfer.setData("text/plain", payload);
-      e.dataTransfer.effectAllowed = "move";
-      el.classList.add("dragging");
-    });
-    el.addEventListener("dragend", () => el.classList.remove("dragging"));
+  el.appendChild(av);
+  el.appendChild(right);
 
-    el.addEventListener("click", async ()=>{
-      try {
-        await navigator.clipboard.writeText(worker.workerId);
-        toast(`IDコピー：${worker.workerId}`);
-      } catch {
-        toast("コピー不可", "error");
-      }
-    });
+  // DnD
+  el.addEventListener("dragstart", (e) => {
+    e.dataTransfer.setData("type", "pool");
+    e.dataTransfer.setData("workerId", worker.workerId);
+  });
 
-    return el;
-  }
+  return el;
 }

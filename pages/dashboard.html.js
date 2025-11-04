@@ -183,11 +183,38 @@ export function renderDashboard(mount) {
     const assignmentsForFloor = currentFloorId
       ? latestAssignmentsAll.filter((a) => a.floorId === currentFloorId)
       : latestAssignmentsAll.slice();
-    floorApi.updateFromAssignments(assignmentsForFloor);
+    const displayAssignments = assignmentsForFloor.slice();
+    const assignedForFloor = new Set(assignmentsForFloor.map((r) => r.workerId));
+    const assignedAll = new Set(latestAssignmentsAll.map((r) => r.workerId));
+
+    if (isReadOnly && rosterEntries.size) {
+      const pseudoAssignments = [];
+      rosterEntries.forEach((entry) => {
+        if (!entry?.workerId || !entry.areaId) return;
+        const targetFloorId = entry.floorId || currentFloorId || "";
+        if (currentFloorId && targetFloorId && targetFloorId !== currentFloorId) {
+          return;
+        }
+        if (assignedForFloor.has(entry.workerId)) return;
+        assignedForFloor.add(entry.workerId);
+        assignedAll.add(entry.workerId);
+        pseudoAssignments.push({
+          id: `roster-${entry.workerId}`,
+          workerId: entry.workerId,
+          areaId: entry.areaId,
+          floorId: targetFloorId,
+          _source: "roster"
+        });
+      });
+      if (pseudoAssignments.length) {
+        displayAssignments.push(...pseudoAssignments);
+      }
+    }
+
+    floorApi.updateFromAssignments(displayAssignments);
     // プール（未配置= roster ー assigned）
     const rosterWorkers = rosterWorkersForPool();
-    const assigned = new Set(latestAssignmentsAll.map((r) => r.workerId));
-    const notAssigned = rosterWorkers.filter((w) => !assigned.has(w.workerId));
+    const notAssigned = rosterWorkers.filter((w) => !assignedAll.has(w.workerId));
     drawPool(poolEl, notAssigned, { readOnly: isReadOnly });
     countEl.textContent = String(notAssigned.length);
     updateViewMode();

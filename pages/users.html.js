@@ -1,3 +1,4 @@
+import { state } from "../core/store.js";
 import { subscribeWorkers, upsertWorker, removeWorker } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 

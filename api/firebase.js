@@ -14,7 +14,8 @@ import {
   where,
   onSnapshot,
   orderBy,
-  getDocs
+  getDocs,
+  getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 
 export const DEFAULT_AREAS = [
@@ -22,8 +23,20 @@ export const DEFAULT_AREAS = [
   { id: "B", label: "エリアB", order: 1 }
 ];
 
+export const DEFAULT_FLOORS = [
+  { id: "1F", label: "1F", order: 0 }
+];
+
 function areaDocId(siteId, floorId) {
   return `${siteId}__${floorId}`;
+}
+
+function floorDocId(siteId) {
+  return `${siteId}`;
+}
+
+function rosterDocId(siteId, floorId, date) {
+  return `${siteId}__${floorId}__${date}`;
 }
 
 // Firebase初期化
@@ -160,6 +173,98 @@ export async function saveAreas({ siteId, floorId, areas }) {
     { merge: true }
   );
   return sanitized;
+}
+
+/* =========================
+ * floorConfigs（フロア定義）API
+ * ========================= */
+
+export function subscribeFloors({ siteId }, cb) {
+  const ref = doc(db, "floorConfigs", floorDocId(siteId));
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        cb(DEFAULT_FLOORS.slice());
+      } else {
+        const data = snap.data();
+        const floors = Array.isArray(data?.floors)
+          ? data.floors.map((f, idx) => ({
+              id: f.id || f.floorId || `F${idx + 1}`,
+              label: f.label || f.name || f.id || `F${idx + 1}`,
+              order: typeof f.order === "number" ? f.order : idx
+            }))
+          : DEFAULT_FLOORS.slice();
+        cb(floors.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+      }
+    },
+    (err) => {
+      console.error("subscribeFloors failed", err);
+      cb(DEFAULT_FLOORS.slice());
+    }
+  );
+}
+
+export async function saveFloors({ siteId, floors }) {
+  const sanitized = (floors || []).map((f, idx) => ({
+    id: f.id,
+    label: f.label,
+    order: typeof f.order === "number" ? f.order : idx
+  }));
+  const ref = doc(db, "floorConfigs", floorDocId(siteId));
+  await setDoc(
+    ref,
+    {
+      siteId,
+      floors: sanitized,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+  return sanitized;
+}
+
+/* =========================
+ * dailyRosters（日次シートの作業者）API
+ * ========================= */
+
+export async function saveDailyRoster({ siteId, floorId, date, workers }) {
+  const sanitized = (workers || []).map((w) => ({
+    workerId: w.workerId,
+    name: w.name || "",
+    areaId: w.areaId || ""
+  }));
+  const ref = doc(db, "dailyRosters", rosterDocId(siteId, floorId, date));
+  await setDoc(
+    ref,
+    {
+      siteId,
+      floorId,
+      date,
+      workers: sanitized,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+  return sanitized;
+}
+
+export async function getDailyRoster({ siteId, floorId, date }) {
+  if (!date) return { workers: [] };
+  const ref = doc(db, "dailyRosters", rosterDocId(siteId, floorId, date));
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    return { workers: [] };
+  }
+  const data = snap.data() || {};
+  const workers = Array.isArray(data.workers)
+    ? data.workers.map((w) => ({
+        workerId: w.workerId,
+        name: w.name || w.workerId,
+        areaId: w.areaId || ""
+      }))
+    : [];
+  return { workers };
 }
 
 /* =========================

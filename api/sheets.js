@@ -36,7 +36,25 @@ export async function readWorkerRows({ sheetId, dateStr, idCol, hasHeader }) {
   )}&range=${idCol}${startRow}:${areaCol}9999`;
 
   const res = await fetch(url);
+  if (!res.ok) {
+    const err = new Error(`Failed to fetch sheet: ${res.status}`);
+    if (res.status === 404) err.code = "SHEET_NOT_FOUND";
+    throw err;
+  }
   const csv = await res.text();
+
+  const trimmed = csv.trim();
+  if (
+    /^<!doctype html/i.test(trimmed) ||
+    /^<html/i.test(trimmed) ||
+    /cannot find range/i.test(csv) ||
+    /sheet.*not found/i.test(csv) ||
+    /does not exist/i.test(csv)
+  ) {
+    const err = new Error("Specified sheet not found");
+    err.code = "SHEET_NOT_FOUND";
+    throw err;
+  }
 
   const lines = csv
     .split(/\r?\n/)

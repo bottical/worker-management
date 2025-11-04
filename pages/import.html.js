@@ -1,7 +1,12 @@
 // pages/import.html.js
 import { state, set } from "../core/store.js";
 import { readWorkerRows } from "../api/sheets.js";
-import { upsertWorker, createAssignment, getActiveAssignments } from "../api/firebase.js";
+import {
+  upsertWorker,
+  createAssignment,
+  getActiveAssignments,
+  saveDailyRoster
+} from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
 export function renderImport(mount) {
@@ -52,6 +57,11 @@ export function renderImport(mount) {
         hasHeader
       });
 
+      if (!rows.length) {
+        toast("シートに作業者が見つかりませんでした", "error");
+        return;
+      }
+
       // マスタUpsert
       let newOrUpdated = 0;
       for (const r of rows) {
@@ -83,6 +93,18 @@ export function renderImport(mount) {
         }
       }
 
+      try {
+        await saveDailyRoster({
+          siteId: state.site.siteId,
+          floorId: state.site.floorId,
+          date: dateStr,
+          workers: rows
+        });
+      } catch (err) {
+        console.error("saveDailyRoster failed", err);
+        toast("日次の作業者リストの保存に失敗しました", "error");
+      }
+
       // ストア更新（workersを丸ごと保存してDashboard初期描画にも反映）
       set({
         sheetId,
@@ -98,7 +120,11 @@ export function renderImport(mount) {
       toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
     } catch (err) {
       console.error(err);
-      toast("取り込みに失敗しました。設定をご確認ください。");
+      if (err?.code === "SHEET_NOT_FOUND") {
+        toast(`シート「${dateStr}」が見つかりません。日付を確認してください。`, "error");
+      } else {
+        toast("取り込みに失敗しました。設定をご確認ください。", "error");
+      }
     }
   });
 }

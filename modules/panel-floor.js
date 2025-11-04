@@ -16,6 +16,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   let _areas = normalizeAreas(areas);
   let _readOnly = false;
   let currentAssignments = [];
+  let currentSite = { ...site };
 
   mount.innerHTML = "";
   const zonesEl = document.createElement("div");
@@ -117,8 +118,8 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
           const workerId = e.dataTransfer.getData("workerId");
           try {
             await createAssignment({
-              siteId: site.siteId,
-              floorId: site.floorId,
+              siteId: currentSite.siteId,
+              floorId: currentSite.floorId,
               areaId,
               workerId
             });
@@ -134,8 +135,8 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
           try {
             await closeAssignment(assignmentId);
             await createAssignment({
-              siteId: site.siteId,
-              floorId: site.floorId,
+              siteId: currentSite.siteId,
+              floorId: currentSite.floorId,
               areaId,
               workerId
             });
@@ -210,6 +211,10 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     renderAssignments();
   }
 
+  function setSite(nextSite = {}) {
+    currentSite = { ...currentSite, ...nextSite };
+  }
+
   function renderZones() {
     zonesEl.innerHTML = "";
     _areas.forEach((area) => {
@@ -240,7 +245,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   }
 
   // グローバルフック（既存実装がこれを呼ぶ）
-  const api = { updateFromAssignments, setWorkerMap, setAreas, setReadOnly };
+  const api = { updateFromAssignments, setWorkerMap, setAreas, setReadOnly, setSite };
   window.__floorRender = api;
 
   // アンマウント

@@ -1,64 +1,104 @@
+// pages/import.html.js
 import { state, set } from "../core/store.js";
-import { readWorkerIdNamePairs } from "../api/sheets.js";
-import { upsertWorker } from "../api/firebase.js";
-import { toast } from "../core/ui.js";
+import { readWorkerRows } from "../api/sheets.js";
+import { upsertWorker, createAssignment, getActiveAssignments } from "../api/firebase.js";
+import { toast } from "../modules/ui.js";
 
-export function renderImport(mount){
+export function renderImport(mount) {
   const box = document.createElement("div");
   box.className = "panel";
   box.innerHTML = `
-    <h2>スプレッドシートから取り込み</h2>
-    <div class="grid" style="grid-template-columns:1fr 220px 120px 160px;gap:8px;margin-bottom:8px">
-      <label>シートID
-        <input id="sheetId" placeholder="1A2b3C..." value="${state.sheetId||""}">
-      </label>
-      <label>日付タブ
-        <input id="date" type="date" value="${state.dateTab}">
-      </label>
-      <label>ID列
-        <input id="col" value="${state.idColumn||"A"}" maxlength="2">
-      </label>
-      <label>ヘッダー
-        <select id="hdr"><option value="1" ${state.hasHeader?"selected":""}>1行目はヘッダー</option><option value="0" ${!state.hasHeader?"selected":""}>なし</option></select>
+    <h2>スプレッドシート取り込み</h2>
+    <div class="form grid two">
+      <label>シートID<input id="sheetId" placeholder="1abc..."/></label>
+      <label>シート名（日付）<input id="dateStr" placeholder="2025-11-04"/></label>
+      <label>ID列（A等）<input id="idCol" placeholder="A"/></label>
+      <label>ヘッダー行
+        <select id="hasHeader">
+          <option value="1" selected>あり</option>
+          <option value="0">なし</option>
+        </select>
       </label>
     </div>
-    <div style="display:flex;gap:8px">
-      <button id="load" class="button">取り込み（ID＋名前）</button>
+    <div class="btnrow">
+      <button id="run" class="btn">取り込む</button>
     </div>
-    <div id="result" class="muted" style="margin-top:8px"></div>
+    <div id="result" class="hint"></div>
   `;
   mount.appendChild(box);
 
-  box.querySelector("#load").onclick = async () => {
+  // 既定値をストアから復元
+  box.querySelector("#sheetId").value = state.sheetId || "";
+  box.querySelector("#dateStr").value = state.dateTab || "";
+  box.querySelector("#idCol").value = state.idColumn || "A";
+  box.querySelector("#hasHeader").value = state.hasHeader ? "1" : "0";
+
+  box.querySelector("#run").addEventListener("click", async () => {
     const sheetId = box.querySelector("#sheetId").value.trim();
-    const dateStr = box.querySelector("#date").value.trim();
-    const col = box.querySelector("#col").value.trim().toUpperCase();
-    const hasHeader = box.querySelector("#hdr").value === "1";
-    if(!sheetId || !dateStr || !/^[A-Z]{1,2}$/.test(col)) { toast("入力を確認してください","error"); return; }
+    const dateStr = box.querySelector("#dateStr").value.trim();
+    const col = (box.querySelector("#idCol").value || "A").trim().toUpperCase();
+    const hasHeader = box.querySelector("#hasHeader").value === "1";
 
-    try{
-      const { ids, pairs, duplicates } = await readWorkerIdNamePairs({ sheetId, dateStr, idCol: col, hasHeader });
+    if (!sheetId || !dateStr) {
+      toast("シートIDとシート名（日付）を入力してください");
+      return;
+    }
 
-      if (duplicates.length > 0) {
-        toast(`重複IDを検出：${duplicates.join(", ")}`, "error");
-        box.querySelector("#result").textContent = `重複ID：${duplicates.join(", ")}（取り込みを中断しました）`;
-        return;
-      }
+    try {
+      const { ids, rows, duplicates } = await readWorkerRows({
+        sheetId,
+        dateStr,
+        idCol: col,
+        hasHeader
+      });
 
-      // DBに upsert（name を反映）
+      // マスタUpsert
       let newOrUpdated = 0;
-      for (const p of pairs) {
-        await upsertWorker({ workerId: p.workerId, name: p.name, active: true });
+      for (const r of rows) {
+        await upsertWorker({
+          workerId: r.workerId,
+          name: r.name,
+          active: true
+        });
         newOrUpdated++;
       }
 
-      set({ sheetId, dateTab: dateStr, idColumn: col, hasHeader, workers: pairs });
-      box.querySelector("#result").textContent = `取り込み成功：${ids.length}名（upsert: ${newOrUpdated}件）`;
-      toast(`取り込み成功：${ids.length}名（upsert: ${newOrUpdated}件）`);
-      location.hash = "#/dashboard";
-    }catch(e){
-      console.error(e);
-      toast(e.message || "読み込みエラー","error");
+      // 自動IN：基本エリアが入っている人のみ（同一サイト・フロアで在籍中判定）
+      const activeNow = await getActiveAssignments(state.site);
+      const assignedSet = new Set(activeNow.map((a) => a.workerId));
+      const toAssign = rows.filter(
+        (r) => r.areaId && !assignedSet.has(r.workerId)
+      );
+
+      for (const r of toAssign) {
+        try {
+          await createAssignment({
+            siteId: state.site.siteId,
+            floorId: state.site.floorId,
+            areaId: r.areaId,
+            workerId: r.workerId
+          });
+        } catch (e) {
+          console.warn("auto-assign failed", r.workerId, e);
+        }
+      }
+
+      // ストア更新（workersを丸ごと保存してDashboard初期描画にも反映）
+      set({
+        sheetId,
+        dateTab: dateStr,
+        idColumn: col,
+        hasHeader,
+        workers: rows
+      });
+
+      const autoInCount = toAssign.length;
+      const dupNote = duplicates.length ? `／重複ID:${duplicates.join(",")}` : "";
+      box.querySelector("#result").textContent = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）${dupNote}`;
+      toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
+    } catch (err) {
+      console.error(err);
+      toast("取り込みに失敗しました。設定をご確認ください。");
     }
-  };
+  });
 }

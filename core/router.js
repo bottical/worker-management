@@ -1,11 +1,13 @@
 import { renderDashboard } from "../pages/dashboard.html.js";
 import { renderImport } from "../pages/import.html.js";
 import { renderUsers } from "../pages/users.html.js";   // ← 追加
+import { renderAreas } from "../pages/areas.html.js";
 
 const routes = {
   "/dashboard": renderDashboard,
   "/import": renderImport,
   "/users": renderUsers,          // ← 追加
+  "/areas": renderAreas
 };
 
 export function boot(){

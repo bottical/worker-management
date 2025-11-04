@@ -2,9 +2,29 @@
 import { ENV } from "../config/env.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, setDoc, doc, updateDoc, deleteDoc,
-  serverTimestamp, query, where, onSnapshot, orderBy, getDocs
+  getFirestore,
+  collection,
+  addDoc,
+  setDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  query,
+  where,
+  onSnapshot,
+  orderBy,
+  getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+export const DEFAULT_AREAS = [
+  { id: "A", label: "エリアA", order: 0 },
+  { id: "B", label: "エリアB", order: 1 }
+];
+
+function areaDocId(siteId, floorId) {
+  return `${siteId}__${floorId}`;
+}
 
 // Firebase初期化
 const app = initializeApp(ENV.firebase);
@@ -51,7 +71,7 @@ export async function updateAssignmentArea({ assignmentId, areaId }){
 }
 
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */
-export function subscribeAssignments({ siteId, floorId }, cb){
+export function subscribeActiveAssignments({ siteId, floorId }, cb){
   const col = collection(db, "assignments");
   const q1 = query(
     col,
@@ -76,6 +96,70 @@ export async function getActiveAssignments({ siteId, floorId }) {
   );
   const snap = await getDocs(q1);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/** 指定日の在籍履歴を取得（同一サイト/フロア） */
+export async function getAssignmentsByDate({ siteId, floorId, date }) {
+  if (!date) return [];
+  const col = collection(db, "assignments");
+  const q1 = query(
+    col,
+    where("siteId", "==", siteId),
+    where("floorId", "==", floorId),
+    where("date", "==", date)
+  );
+  const snap = await getDocs(q1);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+/* =========================
+ * areaConfigs（エリア定義）API
+ * ========================= */
+
+export function subscribeAreas({ siteId, floorId }, cb) {
+  const ref = doc(db, "areaConfigs", areaDocId(siteId, floorId));
+  return onSnapshot(
+    ref,
+    (snap) => {
+      if (!snap.exists()) {
+        cb(DEFAULT_AREAS.slice());
+      } else {
+        const data = snap.data();
+        const areas = Array.isArray(data?.areas)
+          ? data.areas.map((a, idx) => ({
+              id: a.id || a.areaId || `Z${idx + 1}`,
+              label: a.label || a.name || `エリア${a.id || idx + 1}`,
+              order: typeof a.order === "number" ? a.order : idx
+            }))
+          : DEFAULT_AREAS.slice();
+        cb(areas.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+      }
+    },
+    (err) => {
+      console.error("subscribeAreas failed", err);
+      cb(DEFAULT_AREAS.slice());
+    }
+  );
+}
+
+export async function saveAreas({ siteId, floorId, areas }) {
+  const sanitized = (areas || []).map((a, idx) => ({
+    id: a.id,
+    label: a.label,
+    order: typeof a.order === "number" ? a.order : idx
+  }));
+  const ref = doc(db, "areaConfigs", areaDocId(siteId, floorId));
+  await setDoc(
+    ref,
+    {
+      siteId,
+      floorId,
+      areas: sanitized,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+  return sanitized;
 }
 
 /* =========================

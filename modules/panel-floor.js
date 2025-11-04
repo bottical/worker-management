@@ -1,5 +1,9 @@
 // modules/panel-floor.js
-import { createAssignment, closeAssignment } from "../api/firebase.js";
+import {
+  createAssignment,
+  closeAssignment,
+  DEFAULT_AREAS
+} from "../api/firebase.js";
 import { fmtRange } from "../core/ui.js";
 
 /**
@@ -7,22 +11,18 @@ import { fmtRange } from "../core/ui.js";
  * - workerMap を後から差し替え可能（色・時間の反映に対応）
  * - assignments購読から updateFromAssignments(rows) が呼ばれる前提
  */
-export function makeFloor(mount, site, workerMap = new Map()) {
-  // 内部で持つ（外部から setWorkerMap で置換可能）
+export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AREAS) {
   let _workerMap = new Map(workerMap || []);
+  let _areas = normalizeAreas(areas);
+  let _readOnly = false;
+  let currentAssignments = [];
 
-  mount.innerHTML = `
-    <div class="zones">
-      <div class="zone" data-area-id="A">
-        <h3>エリアA</h3>
-        <div class="droparea" data-area-id="A"></div>
-      </div>
-      <div class="zone" data-area-id="B">
-        <h3>エリアB</h3>
-        <div class="droparea" data-area-id="B"></div>
-      </div>
-    </div>
-  `;
+  mount.innerHTML = "";
+  const zonesEl = document.createElement("div");
+  zonesEl.className = "zones";
+  mount.appendChild(zonesEl);
+
+  renderZones();
 
   function getWorkerInfo(workerId) {
     const w = _workerMap.get(workerId) || {};
@@ -34,9 +34,16 @@ export function makeFloor(mount, site, workerMap = new Map()) {
     };
   }
 
+  function getAreaLabel(areaId) {
+    const area = _areas.find((a) => a.id === areaId);
+    if (!area) return `エリア${areaId}`;
+    return area.label || `エリア${area.id}`;
+  }
+
   function slotHtml(workerId, areaId, assignmentId) {
     const info = getWorkerInfo(workerId);
     const meta = fmtRange(info.start, info.end);
+    const areaLabel = getAreaLabel(areaId);
     return `
       <div class="card" draggable="true"
            data-type="placed"
@@ -48,7 +55,7 @@ export function makeFloor(mount, site, workerMap = new Map()) {
         </div>
         <div>
           <div class="mono">${info.name}${meta ? ` ${meta}` : ""}</div>
-          <div class="hint">配置：エリア${areaId}（クリックでOUT）</div>
+          <div class="hint">配置：${areaLabel}${_readOnly ? "（閲覧）" : "（クリックでOUT）"}</div>
         </div>
       </div>
     `;
@@ -60,6 +67,7 @@ export function makeFloor(mount, site, workerMap = new Map()) {
     slot.innerHTML = slotHtml(workerId, areaId, assignmentId);
     // クリックでOUT
     slot.querySelector(".card").addEventListener("click", async (e) => {
+      if (_readOnly) return;
       const id = e.currentTarget.dataset.assignmentId;
       try {
         await closeAssignment(id);
@@ -69,7 +77,12 @@ export function makeFloor(mount, site, workerMap = new Map()) {
     });
     // DnD: フロア内移動（エリア間）
     const card = slot.querySelector(".card");
+    toggleCardMode(card);
     card.addEventListener("dragstart", (e) => {
+      if (_readOnly) {
+        e.preventDefault();
+        return;
+      }
       e.dataTransfer.setData("type", "placed");
       e.dataTransfer.setData("workerId", card.dataset.workerId);
       e.dataTransfer.setData("assignmentId", card.dataset.assignmentId);
@@ -79,60 +92,71 @@ export function makeFloor(mount, site, workerMap = new Map()) {
   }
 
   // ドロップターゲット（エリア）
-  mount.querySelectorAll(".droparea").forEach((drop) => {
-    const zone = drop.closest(".zone");
-    drop.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      zone?.classList.add("dragover");
-    });
-    drop.addEventListener("dragleave", () => {
-      zone?.classList.remove("dragover");
-    });
-    drop.addEventListener("drop", async (e) => {
-      e.preventDefault();
-      zone?.classList.remove("dragover");
-      const type = e.dataTransfer.getData("type");
-      const areaId = drop.dataset.areaId;
-      if (type === "pool") {
-        // 未配置 → IN
-        const workerId = e.dataTransfer.getData("workerId");
-        try {
-          await createAssignment({
-            siteId: site.siteId,
-            floorId: site.floorId,
-            areaId,
-            workerId
-          });
-        } catch (err) {
-          console.warn("createAssignment failed", err);
+  function bindDropzones() {
+    zonesEl.querySelectorAll(".droparea").forEach((drop) => {
+      const zone = drop.closest(".zone");
+      drop.addEventListener("dragover", (e) => {
+        if (_readOnly) return;
+        e.preventDefault();
+        zone?.classList.add("dragover");
+      });
+      drop.addEventListener("dragleave", () => {
+        zone?.classList.remove("dragover");
+      });
+      drop.addEventListener("drop", async (e) => {
+        zone?.classList.remove("dragover");
+        if (_readOnly) {
+          e.preventDefault();
+          return;
         }
-      } else if (type === "placed") {
-        // エリア間移動 = OUT → IN の簡易実装（サーバー側で同一workerのoutAtセット→新規作成）
-        const assignmentId = e.dataTransfer.getData("assignmentId");
-        const workerId = e.dataTransfer.getData("workerId");
-        const from = e.dataTransfer.getData("fromAreaId");
-        if (from === areaId) return; // 同一エリアなら何もしない
-        try {
-          await closeAssignment(assignmentId);
-          await createAssignment({
-            siteId: site.siteId,
-            floorId: site.floorId,
-            areaId,
-            workerId
-          });
-        } catch (err) {
-          console.warn("move (close+create) failed", err);
+        e.preventDefault();
+        const type = e.dataTransfer.getData("type");
+        const areaId = drop.dataset.areaId;
+        if (type === "pool") {
+          // 未配置 → IN
+          const workerId = e.dataTransfer.getData("workerId");
+          try {
+            await createAssignment({
+              siteId: site.siteId,
+              floorId: site.floorId,
+              areaId,
+              workerId
+            });
+          } catch (err) {
+            console.warn("createAssignment failed", err);
+          }
+        } else if (type === "placed") {
+          // エリア間移動 = OUT → IN の簡易実装（サーバー側で同一workerのoutAtセット→新規作成）
+          const assignmentId = e.dataTransfer.getData("assignmentId");
+          const workerId = e.dataTransfer.getData("workerId");
+          const from = e.dataTransfer.getData("fromAreaId");
+          if (from === areaId) return; // 同一エリアなら何もしない
+          try {
+            await closeAssignment(assignmentId);
+            await createAssignment({
+              siteId: site.siteId,
+              floorId: site.floorId,
+              areaId,
+              workerId
+            });
+          } catch (err) {
+            console.warn("move (close+create) failed", err);
+          }
         }
-      }
+      });
     });
-  });
+  }
 
   // 外部（Dashboard）から呼ばれる：在籍スナップショットの反映
   function updateFromAssignments(rows) {
-    // クリアしてから再構築（シンプルな再描画）
-    mount.querySelectorAll(".droparea").forEach((d) => (d.innerHTML = ""));
-    rows.forEach((r) => {
-      const drop = mount.querySelector(`.droparea[data-area-id="${r.areaId}"]`);
+    currentAssignments = Array.isArray(rows) ? rows.slice() : [];
+    renderAssignments();
+  }
+
+  function renderAssignments() {
+    zonesEl.querySelectorAll(".droparea").forEach((d) => (d.innerHTML = ""));
+    currentAssignments.forEach((r) => {
+      const drop = zonesEl.querySelector(`.droparea[data-area-id="${r.areaId}"]`);
       if (drop) addSlot(drop, r.workerId, r.areaId, r.id);
     });
   }
@@ -156,16 +180,73 @@ export function makeFloor(mount, site, workerMap = new Map()) {
         title.textContent = `${info.name}${meta ? ` ${meta}` : ""}`;
       }
       const hint = card.querySelector(".hint");
-      if (hint) hint.textContent = `配置：エリア${areaId}（クリックでOUT）`;
+      if (hint) {
+        const label = getAreaLabel(areaId);
+        hint.textContent = `配置：${label}${_readOnly ? "（閲覧）" : "（クリックでOUT）"}`;
+      }
+      toggleCardMode(card);
     });
   }
 
+  function toggleCardMode(card) {
+    if (!card) return;
+    if (_readOnly) {
+      card.classList.add("readonly");
+      card.setAttribute("draggable", "false");
+    } else {
+      card.classList.remove("readonly");
+      card.setAttribute("draggable", "true");
+    }
+  }
+
+  function setAreas(list) {
+    _areas = normalizeAreas(list);
+    renderZones();
+    renderAssignments();
+  }
+
+  function setReadOnly(flag) {
+    _readOnly = Boolean(flag);
+    renderAssignments();
+  }
+
+  function renderZones() {
+    zonesEl.innerHTML = "";
+    _areas.forEach((area) => {
+      const zone = document.createElement("div");
+      zone.className = "zone";
+      zone.dataset.areaId = area.id;
+      const title = document.createElement("h3");
+      title.textContent = area.label || `エリア${area.id}`;
+      const drop = document.createElement("div");
+      drop.className = "droparea";
+      drop.dataset.areaId = area.id;
+      zone.appendChild(title);
+      zone.appendChild(drop);
+      zonesEl.appendChild(zone);
+    });
+    bindDropzones();
+  }
+
+  function normalizeAreas(list) {
+    if (!Array.isArray(list) || list.length === 0) return DEFAULT_AREAS.slice();
+    return list
+      .map((a, idx) => ({
+        id: a.id || a.areaId || `Z${idx + 1}`,
+        label: a.label || a.name || `エリア${a.id || idx + 1}`,
+        order: typeof a.order === "number" ? a.order : idx
+      }))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }
+
   // グローバルフック（既存実装がこれを呼ぶ）
-  window.__floorRender = { updateFromAssignments, setWorkerMap };
+  const api = { updateFromAssignments, setWorkerMap, setAreas, setReadOnly };
+  window.__floorRender = api;
 
   // アンマウント
-  return () => {
+  api.unmount = () => {
     if (window.__floorRender) delete window.__floorRender;
     mount.innerHTML = "";
   };
+  return api;
 }

@@ -8,6 +8,7 @@ export const state = {
   workers: [],                   // ["ID001", ...]
   placed: new Map(),             // workerId -> { zone: "A"|"B", assignmentId }
   site: ENV.defaultSite,         // {siteId, floorId}
+  assignmentDate: new Date().toISOString().slice(0,10),
 };
 
 export function set(partial){

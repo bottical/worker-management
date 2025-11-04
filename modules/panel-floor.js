@@ -12,14 +12,14 @@ export function makeFloor(mount, site, workerMap = new Map()) {
   let _workerMap = new Map(workerMap || []);
 
   mount.innerHTML = `
-    <div class="floor">
-      <div class="area" data-area-id="A">
-        <div class="area-head">エリアA</div>
-        <div class="drop" data-area-id="A"></div>
+    <div class="zones">
+      <div class="zone" data-area-id="A">
+        <h3>エリアA</h3>
+        <div class="droparea" data-area-id="A"></div>
       </div>
-      <div class="area" data-area-id="B">
-        <div class="area-head">エリアB</div>
-        <div class="drop" data-area-id="B"></div>
+      <div class="zone" data-area-id="B">
+        <h3>エリアB</h3>
+        <div class="droparea" data-area-id="B"></div>
       </div>
     </div>
   `;
@@ -79,10 +79,18 @@ export function makeFloor(mount, site, workerMap = new Map()) {
   }
 
   // ドロップターゲット（エリア）
-  mount.querySelectorAll(".drop").forEach((drop) => {
-    drop.addEventListener("dragover", (e) => e.preventDefault());
+  mount.querySelectorAll(".droparea").forEach((drop) => {
+    const zone = drop.closest(".zone");
+    drop.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      zone?.classList.add("dragover");
+    });
+    drop.addEventListener("dragleave", () => {
+      zone?.classList.remove("dragover");
+    });
     drop.addEventListener("drop", async (e) => {
       e.preventDefault();
+      zone?.classList.remove("dragover");
       const type = e.dataTransfer.getData("type");
       const areaId = drop.dataset.areaId;
       if (type === "pool") {
@@ -122,9 +130,9 @@ export function makeFloor(mount, site, workerMap = new Map()) {
   // 外部（Dashboard）から呼ばれる：在籍スナップショットの反映
   function updateFromAssignments(rows) {
     // クリアしてから再構築（シンプルな再描画）
-    mount.querySelectorAll(".drop").forEach((d) => (d.innerHTML = ""));
+    mount.querySelectorAll(".droparea").forEach((d) => (d.innerHTML = ""));
     rows.forEach((r) => {
-      const drop = mount.querySelector(`.drop[data-area-id="${r.areaId}"]`);
+      const drop = mount.querySelector(`.droparea[data-area-id="${r.areaId}"]`);
       if (drop) addSlot(drop, r.workerId, r.areaId, r.id);
     });
   }

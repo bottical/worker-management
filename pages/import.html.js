@@ -2,7 +2,7 @@
 import { state, set } from "../core/store.js";
 import { readWorkerRows } from "../api/sheets.js";
 import { upsertWorker, createAssignment, getActiveAssignments } from "../api/firebase.js";
-import { toast } from "../modules/ui.js";
+import { toast } from "../core/ui.js";
 
 export function renderImport(mount) {
   const box = document.createElement("div");

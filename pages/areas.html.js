@@ -115,7 +115,7 @@ export function renderAreas(mount) {
       opt.textContent = floor.label;
       floorSelect.appendChild(opt);
     });
-    floorSelect.disabled = list.length <= 1;
+    floorSelect.disabled = list.length === 0;
     if (!list.some((f) => f.id === currentFloorId)) {
       currentFloorId = list[0].id;
       set({ site: { ...state.site, floorId: currentFloorId } });

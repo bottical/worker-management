@@ -35,7 +35,7 @@ export function renderUsers(mount){
     <table class="table" id="list">
       <thead>
         <tr>
-          <th>ID</th><th>氏名</th><th>会社</th><th>区分</th><th>派遣元</th><th>skills</th><th>End</th><th>active</th><th>操作</th>
+          <th>ID</th><th>氏名</th><th>会社</th><th>区分</th><th>派遣元</th><th>skills</th><th>Start</th><th>End</th><th>active</th><th>操作</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -92,6 +92,7 @@ export function renderUsers(mount){
         <td>${w.employmentType||""}</td>
         <td>${w.agency||""}</td>
         <td>${(w.skills||[]).join(", ")}</td>
+        <td>${w.defaultStartTime||""}</td>
         <td>${w.defaultEndTime||""}</td>
         <td>${w.active ? "✔" : ""}</td>
         <td class="row-actions">

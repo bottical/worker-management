@@ -56,6 +56,111 @@ function assertUserSite({ userId, siteId }) {
   if (!siteId) throw new Error("siteId is required");
 }
 
+function normalizedDefaultFloors(defaultFloorId) {
+  const provided = (ENV.defaultSite?.floors || []).filter(Boolean);
+  const merged = provided.length ? provided : DEFAULT_FLOORS;
+  const seen = new Set();
+  const list = merged
+    .map((f, idx) => ({
+      id: f.id || f.floorId || `F${idx + 1}`,
+      label: f.label || f.name || f.id || `F${idx + 1}`,
+      order: typeof f.order === "number" ? f.order : idx
+    }))
+    .filter((f) => {
+      if (!f.id || seen.has(f.id)) return false;
+      seen.add(f.id);
+      return true;
+    });
+  if (defaultFloorId && !seen.has(defaultFloorId)) {
+    list.unshift({ id: defaultFloorId, label: defaultFloorId, order: -1 });
+  }
+  return list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((f, idx) => ({
+    id: f.id,
+    label: f.label,
+    order: typeof f.order === "number" ? f.order : idx
+  }));
+}
+
+function normalizedDefaultAreas() {
+  const provided = (ENV.defaultSite?.areas || []).filter(Boolean);
+  const merged = provided.length ? provided : DEFAULT_AREAS;
+  const seen = new Set();
+  return merged
+    .map((a, idx) => ({
+      id: a.id || a.areaId || `Z${idx + 1}`,
+      label: a.label || a.name || a.id || `エリア${idx + 1}`,
+      order: typeof a.order === "number" ? a.order : idx
+    }))
+    .filter((a) => {
+      if (!a.id || seen.has(a.id)) return false;
+      seen.add(a.id);
+      return true;
+    })
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((a, idx) => ({
+      id: a.id,
+      label: a.label,
+      order: typeof a.order === "number" ? a.order : idx
+    }));
+}
+
+export async function ensureDefaultSiteForUser(userId) {
+  if (!userId) return null;
+  const configured = ENV.defaultSite || {};
+  const siteId = configured.siteId || "site1";
+  const defaultFloorId = configured.floorId || DEFAULT_FLOORS[0]?.id || "";
+  const label = configured.label || configured.name || "デフォルトサイト";
+
+  const siteRef = siteDocRef(userId, siteId);
+  const siteSnap = await getDoc(siteRef);
+  if (!siteSnap.exists()) {
+    await setDoc(
+      siteRef,
+      {
+        siteId,
+        label,
+        defaultFloorId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+  }
+
+  const floorsRef = siteDocument(userId, siteId, "floorConfigs", floorDocId(siteId));
+  const floorsSnap = await getDoc(floorsRef);
+  if (!floorsSnap.exists()) {
+    const floors = normalizedDefaultFloors(defaultFloorId);
+    await setDoc(
+      floorsRef,
+      {
+        siteId,
+        floors,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+  }
+
+  const areasRef = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, defaultFloorId || ""));
+  const areasSnap = await getDoc(areasRef);
+  if (!areasSnap.exists()) {
+    const areas = normalizedDefaultAreas();
+    await setDoc(
+      areasRef,
+      {
+        siteId,
+        floorId: defaultFloorId || "",
+        areas,
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+  }
+
+  return siteId;
+}
+
 function siteDocRef(userId, siteId) {
   assertUserSite({ userId, siteId });
   return doc(db, "users", userId, "sites", siteId);

@@ -1,6 +1,6 @@
 // modules/panel-floor.js
 import { createAssignment, closeAssignment } from "../api/firebase.js";
-import { fmtRange } from "../modules/ui.js";
+import { fmtRange } from "../core/ui.js";
 
 /**
  * フロア（ゾーン）側の描画と、在籍の反映を担う

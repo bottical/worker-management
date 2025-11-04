@@ -100,6 +100,42 @@ export async function upsertWorker(worker){
   return id;
 }
 
+/** 在籍中（outAt=null）を一度だけ取得（重複IN防止用） */
+export async function getActiveAssignments({ siteId, floorId }) {
+  const db = getFirestore();
+  const col = collection(db, "assignments");
+  const q1 = query(
+    col,
+    where("siteId", "==", siteId),
+    where("floorId", "==", floorId),
+    where("outAt", "==", null)
+  );
+  const snap = await getDocs(q1);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+// （未定義時のみ追記）
+export async function createAssignment({ siteId, floorId, areaId, workerId }) {
+  const db = getFirestore();
+  const col = collection(db, "assignments");
+  await addDoc(col, {
+    siteId,
+    floorId,
+    areaId,
+    workerId,
+    inAt: serverTimestamp(),
+    outAt: null
+  });
+}
+
+export async function closeAssignment(assignmentId) {
+  const db = getFirestore();
+  const ref = doc(db, "assignments", assignmentId);
+  await updateDoc(ref, { outAt: serverTimestamp() });
+}
+
+
+
 
 export async function removeWorker(workerId){
   await deleteDoc(doc(db, "workers", workerId));

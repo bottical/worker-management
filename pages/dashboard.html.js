@@ -21,7 +21,7 @@ export function renderDashboard(mount) {
   const wrap = document.createElement("div");
   wrap.className = "grid twocol";
   wrap.innerHTML = `
-    <aside class="panel left">
+    <aside class="panel left dashboard-pool-panel">
       <h2>未配置（<span id="count">0</span>名）</h2>
       <div class="hint">左から右へドラッグ＆ドロップ</div>
       <div id="pool" class="cards"></div>
@@ -70,17 +70,18 @@ export function renderDashboard(mount) {
     };
   }
 
-  function toRosterEntry(row) {
+  function toRosterEntry(row, floorId = "") {
     if (!row) return null;
     if (typeof row === "string") {
-      return { workerId: row, name: row, areaId: "" };
+      return { workerId: row, name: row, areaId: "", floorId };
     }
     const workerId = row.workerId || "";
     if (!workerId) return null;
     return {
       workerId,
       name: row.name || workerId,
-      areaId: row.areaId || ""
+      areaId: row.areaId || "",
+      floorId: row.floorId || floorId || ""
     };
   }
 
@@ -105,7 +106,7 @@ export function renderDashboard(mount) {
     state.dateTab === selectedDate && Array.isArray(state.workers)
       ? new Map(
           state.workers
-            .map(toRosterEntry)
+            .map((row) => toRosterEntry(row))
             .filter((w) => w && w.workerId)
             .map((w) => [w.workerId, w])
         )
@@ -121,7 +122,7 @@ export function renderDashboard(mount) {
   makePool(poolEl, state.site);
 
   // 購読状態
-  let latestAssignments = [];
+  let latestAssignmentsAll = [];
   let unsubAssign = () => {};
   let unsubAreas = () => {};
   let unsubFloors = () => {};
@@ -138,7 +139,7 @@ export function renderDashboard(mount) {
         });
       }
     });
-    latestAssignments.forEach((row) => {
+    latestAssignmentsAll.forEach((row) => {
       if (!row?.workerId || map.has(row.workerId)) return;
       map.set(row.workerId, {
         name: row.workerId,
@@ -178,10 +179,14 @@ export function renderDashboard(mount) {
     workerMap = buildWorkerMap();
     // フロア（在籍）更新
     floorApi.setWorkerMap(workerMap);
-    floorApi.updateFromAssignments(latestAssignments);
+    const currentFloorId = state.site.floorId;
+    const assignmentsForFloor = currentFloorId
+      ? latestAssignmentsAll.filter((a) => a.floorId === currentFloorId)
+      : latestAssignmentsAll.slice();
+    floorApi.updateFromAssignments(assignmentsForFloor);
     // プール（未配置= roster ー assigned）
     const rosterWorkers = rosterWorkersForPool();
-    const assigned = new Set(latestAssignments.map((r) => r.workerId));
+    const assigned = new Set(latestAssignmentsAll.map((r) => r.workerId));
     const notAssigned = rosterWorkers.filter((w) => !assigned.has(w.workerId));
     drawPool(poolEl, notAssigned, { readOnly: isReadOnly });
     countEl.textContent = String(notAssigned.length);
@@ -243,12 +248,15 @@ export function renderDashboard(mount) {
 
   function startLiveSubscription() {
     stopLiveSubscription();
-    latestAssignments = [];
+    latestAssignmentsAll = [];
     reconcile();
-    unsubAssign = subscribeActiveAssignments(state.site, (rows) => {
-      latestAssignments = dedupeAssignments(rows);
-      reconcile();
-    });
+    unsubAssign = subscribeActiveAssignments(
+      { siteId: state.site.siteId },
+      (rows) => {
+        latestAssignmentsAll = dedupeAssignments(rows);
+        reconcile();
+      }
+    );
   }
 
   function stopLiveSubscription() {
@@ -256,6 +264,20 @@ export function renderDashboard(mount) {
       unsubAssign?.();
     } catch {}
     unsubAssign = () => {};
+  }
+
+  async function loadAssignmentsSnapshotForDate(dateStr) {
+    try {
+      const rows = await getAssignmentsByDate({
+        siteId: state.site.siteId,
+        date: dateStr
+      });
+      latestAssignmentsAll = dedupeAssignments(rows);
+    } catch (err) {
+      console.error("getAssignmentsByDate failed", err);
+      toast("在籍データの取得に失敗しました", "error");
+      latestAssignmentsAll = [];
+    }
   }
 
   async function loadAssignmentsForDate(dateStr) {
@@ -273,40 +295,46 @@ export function renderDashboard(mount) {
       isReadOnly = true;
       updateViewMode();
       stopLiveSubscription();
-      try {
-        const rows = await getAssignmentsByDate({
-          siteId: state.site.siteId,
-          floorId: state.site.floorId,
-          date: selectedDate
-        });
-        latestAssignments = dedupeAssignments(rows);
-      } catch (err) {
-        console.error("getAssignmentsByDate failed", err);
-        toast("在籍データの取得に失敗しました", "error");
-        latestAssignments = [];
-      }
+      await loadAssignmentsSnapshotForDate(selectedDate);
     }
     reconcile();
   }
 
   async function loadRosterForDate(dateStr) {
-    try {
-      const { workers } = await getDailyRoster({
-        siteId: state.site.siteId,
-        floorId: state.site.floorId,
-        date: dateStr
-      });
-      rosterEntries = new Map(
-        (workers || [])
-          .map(toRosterEntry)
-          .filter((w) => w && w.workerId)
-          .map((w) => [w.workerId, w])
-      );
-    } catch (err) {
-      console.error("getDailyRoster failed", err);
-      toast("作業者リストの取得に失敗しました", "error");
+    const floors =
+      floorList && floorList.length ? floorList.map((f) => f.id).filter(Boolean) : [];
+    const targets = floors.length
+      ? floors
+      : (state.site.floorId ? [state.site.floorId] : []);
+    if (!targets.length) {
       rosterEntries = new Map();
+      reconcile();
+      return;
     }
+    const combined = new Map();
+    await Promise.all(
+      targets.map(async (floorId) => {
+        try {
+          const { workers } = await getDailyRoster({
+            siteId: state.site.siteId,
+            floorId,
+            date: dateStr
+          });
+          (workers || [])
+            .map((row) => toRosterEntry(row, floorId))
+            .filter((w) => w && w.workerId)
+            .forEach((entry) => {
+              if (!combined.has(entry.workerId)) {
+                combined.set(entry.workerId, entry);
+              }
+            });
+        } catch (err) {
+          console.error("getDailyRoster failed", err);
+          toast("作業者リストの取得に失敗しました", "error");
+        }
+      })
+    );
+    rosterEntries = combined;
     reconcile();
   }
 
@@ -363,6 +391,9 @@ export function renderDashboard(mount) {
           ? floors
           : DEFAULT_FLOORS.slice();
       renderFloorOptions();
+      loadRosterForDate(selectedDate).catch((err) => {
+        console.error("loadRosterForDate failed", err);
+      });
       const hasCurrent = floorList.some((f) => f.id === state.site.floorId);
       if (!hasCurrent && floorList[0]) {
         handleFloorChange(floorList[0].id, { force: true }).catch((err) => {

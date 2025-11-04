@@ -11,17 +11,22 @@ export function makePool(mount, site) {
  * @param {HTMLElement} container
  * @param {Array} workers - [{workerId,name,defaultStartTime,defaultEndTime,panel:{color}}]
  */
-export function drawPool(container, workers = []) {
+export function drawPool(container, workers = [], options = {}) {
+  const { readOnly = false } = options;
   container.innerHTML = "";
-  workers.forEach((w) => container.appendChild(card(w)));
+  workers.forEach((w) => container.appendChild(card(w, readOnly)));
 }
 
-function card(worker) {
+function card(worker, readOnly) {
   const el = document.createElement("div");
   el.className = "card";
-  el.setAttribute("draggable", "true");
-  el.dataset.type = "pool";
-  el.dataset.workerId = worker.workerId;
+  if (!readOnly) {
+    el.setAttribute("draggable", "true");
+    el.dataset.type = "pool";
+    el.dataset.workerId = worker.workerId;
+  } else {
+    el.classList.add("readonly");
+  }
 
   const av = document.createElement("div");
   av.className = "avatar";
@@ -35,7 +40,7 @@ function card(worker) {
 
   const hint = document.createElement("div");
   hint.className = "hint";
-  hint.textContent = "ドラッグで配置（IN）";
+  hint.textContent = readOnly ? "閲覧モード" : "ドラッグで配置（IN）";
 
   const right = document.createElement("div");
   right.appendChild(title);
@@ -45,10 +50,12 @@ function card(worker) {
   el.appendChild(right);
 
   // DnD
-  el.addEventListener("dragstart", (e) => {
-    e.dataTransfer.setData("type", "pool");
-    e.dataTransfer.setData("workerId", worker.workerId);
-  });
+  if (!readOnly) {
+    el.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("type", "pool");
+      e.dataTransfer.setData("workerId", worker.workerId);
+    });
+  }
 
   return el;
 }

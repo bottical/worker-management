@@ -2,8 +2,9 @@ import { ENV } from "../config/env.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import {
   getFirestore, collection, addDoc, setDoc, doc, updateDoc, deleteDoc,
-  serverTimestamp, query, where, onSnapshot, orderBy
+  serverTimestamp, query, where, onSnapshot, orderBy, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
 
 // Firebase初期化
 const app = initializeApp(ENV.firebase);

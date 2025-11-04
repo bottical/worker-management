@@ -1,5 +1,5 @@
 // modules/panel-pool.js
-import { fmtRange } from "../modules/ui.js";
+import { fmtRange } from "../core/ui.js";
 
 export function makePool(mount, site) {
   // noop（現状siteは未使用だが将来用）

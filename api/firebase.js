@@ -15,8 +15,15 @@ import {
   onSnapshot,
   orderBy,
   getDocs,
-  getDoc
+  getDoc,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
 
 export const DEFAULT_AREAS = [
   { id: "A", label: "エリアA", order: 0 },
@@ -28,7 +35,7 @@ export const DEFAULT_FLOORS = [
 ];
 
 function areaDocId(siteId, floorId) {
-  return `${siteId}__${floorId}`;
+  return `${siteId}__${floorId || "default"}`;
 }
 
 function floorDocId(siteId) {
@@ -42,65 +49,170 @@ function rosterDocId(siteId, floorId, date) {
 // Firebase初期化
 const app = initializeApp(ENV.firebase);
 export const db = getFirestore(app);
+export const auth = getAuth(app);
+
+function assertUserSite({ userId, siteId }) {
+  if (!userId) throw new Error("userId is required");
+  if (!siteId) throw new Error("siteId is required");
+}
+
+function siteDocRef(userId, siteId) {
+  assertUserSite({ userId, siteId });
+  return doc(db, "users", userId, "sites", siteId);
+}
+
+function siteCollection(userId, siteId, collectionName) {
+  assertUserSite({ userId, siteId });
+  return collection(db, "users", userId, "sites", siteId, collectionName);
+}
+
+function siteDocument(userId, siteId, collectionName, documentId) {
+  assertUserSite({ userId, siteId });
+  return doc(db, "users", userId, "sites", siteId, collectionName, documentId);
+}
+
+async function ensureSiteMetadata(userId, siteId, extra = {}) {
+  const ref = siteDocRef(userId, siteId);
+  await setDoc(
+    ref,
+    {
+      siteId,
+      ...extra,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+}
+
+export function onAuthState(cb) {
+  return onAuthStateChanged(auth, cb);
+}
+
+export function loginWithEmailPassword(email, password) {
+  return signInWithEmailAndPassword(auth, email, password);
+}
+
+export function logout() {
+  return signOut(auth);
+}
+
+export function subscribeSites(userId, cb) {
+  if (!userId) {
+    cb([]);
+    return () => {};
+  }
+  const col = collection(db, "users", userId, "sites");
+  return onSnapshot(
+    col,
+    (snap) => {
+      const list = snap.docs.map((d) => {
+        const data = d.data() || {};
+        return {
+          id: d.id,
+          label: data.label || data.name || d.id,
+          defaultFloorId: data.defaultFloorId || data.defaultFloor || "",
+          ...data
+        };
+      });
+      cb(list);
+    },
+    (err) => {
+      console.error("subscribeSites failed", err);
+      cb([]);
+    }
+  );
+}
 
 /* =========================
  * assignments（在籍）API
  * ========================= */
 
 /** 在籍開始（IN） */
-export async function createAssignment({ siteId, floorId, areaId, workerId }){
-  const ref = await addDoc(collection(db, "assignments"), {
-    siteId, floorId, areaId, workerId,
-    date: new Date().toISOString().slice(0,10),
+export async function createAssignment({ userId, siteId, floorId, areaId, workerId }) {
+  assertUserSite({ userId, siteId });
+  if (!workerId) throw new Error("workerId is required");
+  await ensureSiteMetadata(userId, siteId);
+  const col = siteCollection(userId, siteId, "assignments");
+  const batch = writeBatch(db);
+  const duplicatesQuery = query(
+    col,
+    where("workerId", "==", workerId),
+    where("outAt", "==", null)
+  );
+  const dupSnap = await getDocs(duplicatesQuery);
+  dupSnap.forEach((docSnap) => {
+    batch.update(docSnap.ref, {
+      outAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      closedReason: "reassigned"
+    });
+  });
+  if (!dupSnap.empty) {
+    await batch.commit();
+  }
+  const payload = {
+    userId,
+    siteId,
+    floorId: floorId || "",
+    areaId: areaId || "",
+    workerId,
+    date: new Date().toISOString().slice(0, 10),
     inAt: serverTimestamp(),
     outAt: null,
     createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+    updatedAt: serverTimestamp()
+  };
+  const ref = await addDoc(col, payload);
   return ref.id;
 }
 
 /** 在籍終了（OUT） */
-export async function endAssignment({ assignmentId }){
-  const ref = doc(db, "assignments", assignmentId);
+export async function endAssignment({ userId, siteId, assignmentId }) {
+  assertUserSite({ userId, siteId });
+  if (!assignmentId) return;
+  const ref = siteDocument(userId, siteId, "assignments", assignmentId);
   await updateDoc(ref, {
     outAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
   });
 }
 
-/** UI互換：closeAssignment(assignmentId) → endAssignment に委譲 */
-export async function closeAssignment(assignmentId){
-  return endAssignment({ assignmentId });
+/** UI互換：closeAssignment → endAssignment に委譲 */
+export async function closeAssignment({ userId, siteId, assignmentId }) {
+  return endAssignment({ userId, siteId, assignmentId });
 }
 
 /** エリア間の異動（配置済みをドラッグ移動） */
-export async function updateAssignmentArea({ assignmentId, areaId }){
-  const ref = doc(db, "assignments", assignmentId);
+export async function updateAssignmentArea({ userId, siteId, assignmentId, areaId }) {
+  assertUserSite({ userId, siteId });
+  if (!assignmentId) return;
+  const ref = siteDocument(userId, siteId, "assignments", assignmentId);
   await updateDoc(ref, {
     areaId,
-    updatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
   });
 }
 
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */
-export function subscribeActiveAssignments({ siteId, floorId }, cb){
-  const col = collection(db, "assignments");
-  const filters = [where("siteId","==",siteId), where("outAt","==",null)];
+export function subscribeActiveAssignments({ userId, siteId, floorId }, cb) {
+  assertUserSite({ userId, siteId });
+  const col = siteCollection(userId, siteId, "assignments");
+  const filters = [where("outAt", "==", null)];
   if (floorId) {
-    filters.push(where("floorId","==",floorId));
+    filters.push(where("floorId", "==", floorId));
   }
   const q1 = query(col, ...filters);
-  return onSnapshot(q1, snap => {
-    const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+  return onSnapshot(q1, (snap) => {
+    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     cb(rows);
   });
 }
 
 /** 在籍中（outAt=null）を一度だけ取得（重複IN防止用） */
-export async function getActiveAssignments({ siteId, floorId }) {
-  const col = collection(db, "assignments");
-  const filters = [where("siteId", "==", siteId), where("outAt", "==", null)];
+export async function getActiveAssignments({ userId, siteId, floorId }) {
+  assertUserSite({ userId, siteId });
+  const col = siteCollection(userId, siteId, "assignments");
+  const filters = [where("outAt", "==", null)];
   if (floorId) {
     filters.push(where("floorId", "==", floorId));
   }
@@ -110,10 +222,11 @@ export async function getActiveAssignments({ siteId, floorId }) {
 }
 
 /** 指定日の在籍履歴を取得（同一サイト/フロア） */
-export async function getAssignmentsByDate({ siteId, floorId, date }) {
+export async function getAssignmentsByDate({ userId, siteId, floorId, date }) {
   if (!date) return [];
-  const col = collection(db, "assignments");
-  const filters = [where("siteId", "==", siteId), where("date", "==", date)];
+  assertUserSite({ userId, siteId });
+  const col = siteCollection(userId, siteId, "assignments");
+  const filters = [where("date", "==", date)];
   if (floorId) {
     filters.push(where("floorId", "==", floorId));
   }
@@ -126,8 +239,9 @@ export async function getAssignmentsByDate({ siteId, floorId, date }) {
  * areaConfigs（エリア定義）API
  * ========================= */
 
-export function subscribeAreas({ siteId, floorId }, cb) {
-  const ref = doc(db, "areaConfigs", areaDocId(siteId, floorId));
+export function subscribeAreas({ userId, siteId, floorId }, cb) {
+  assertUserSite({ userId, siteId });
+  const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
   return onSnapshot(
     ref,
     (snap) => {
@@ -152,18 +266,20 @@ export function subscribeAreas({ siteId, floorId }, cb) {
   );
 }
 
-export async function saveAreas({ siteId, floorId, areas }) {
+export async function saveAreas({ userId, siteId, floorId, areas }) {
+  assertUserSite({ userId, siteId });
   const sanitized = (areas || []).map((a, idx) => ({
     id: a.id,
     label: a.label,
     order: typeof a.order === "number" ? a.order : idx
   }));
-  const ref = doc(db, "areaConfigs", areaDocId(siteId, floorId));
+  await ensureSiteMetadata(userId, siteId);
+  const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
   await setDoc(
     ref,
     {
       siteId,
-      floorId,
+      floorId: floorId || "",
       areas: sanitized,
       updatedAt: serverTimestamp()
     },
@@ -176,8 +292,9 @@ export async function saveAreas({ siteId, floorId, areas }) {
  * floorConfigs（フロア定義）API
  * ========================= */
 
-export function subscribeFloors({ siteId }, cb) {
-  const ref = doc(db, "floorConfigs", floorDocId(siteId));
+export function subscribeFloors({ userId, siteId }, cb) {
+  assertUserSite({ userId, siteId });
+  const ref = siteDocument(userId, siteId, "floorConfigs", floorDocId(siteId));
   return onSnapshot(
     ref,
     (snap) => {
@@ -202,13 +319,19 @@ export function subscribeFloors({ siteId }, cb) {
   );
 }
 
-export async function saveFloors({ siteId, floors }) {
+export async function saveFloors({ userId, siteId, floors, siteLabel }) {
+  assertUserSite({ userId, siteId });
   const sanitized = (floors || []).map((f, idx) => ({
     id: f.id,
     label: f.label,
     order: typeof f.order === "number" ? f.order : idx
   }));
-  const ref = doc(db, "floorConfigs", floorDocId(siteId));
+  const defaultFloorId = sanitized[0]?.id || "";
+  await ensureSiteMetadata(userId, siteId, {
+    label: siteLabel || undefined,
+    defaultFloorId
+  });
+  const ref = siteDocument(userId, siteId, "floorConfigs", floorDocId(siteId));
   await setDoc(
     ref,
     {
@@ -225,18 +348,20 @@ export async function saveFloors({ siteId, floors }) {
  * dailyRosters（日次シートの作業者）API
  * ========================= */
 
-export async function saveDailyRoster({ siteId, floorId, date, workers }) {
+export async function saveDailyRoster({ userId, siteId, floorId, date, workers }) {
+  assertUserSite({ userId, siteId });
   const sanitized = (workers || []).map((w) => ({
     workerId: w.workerId,
     name: w.name || "",
     areaId: w.areaId || ""
   }));
-  const ref = doc(db, "dailyRosters", rosterDocId(siteId, floorId, date));
+  await ensureSiteMetadata(userId, siteId);
+  const ref = siteDocument(userId, siteId, "dailyRosters", rosterDocId(siteId, floorId || "", date));
   await setDoc(
     ref,
     {
       siteId,
-      floorId,
+      floorId: floorId || "",
       date,
       workers: sanitized,
       updatedAt: serverTimestamp()
@@ -246,9 +371,10 @@ export async function saveDailyRoster({ siteId, floorId, date, workers }) {
   return sanitized;
 }
 
-export async function getDailyRoster({ siteId, floorId, date }) {
+export async function getDailyRoster({ userId, siteId, floorId, date }) {
+  assertUserSite({ userId, siteId });
   if (!date) return { workers: [] };
-  const ref = doc(db, "dailyRosters", rosterDocId(siteId, floorId, date));
+  const ref = siteDocument(userId, siteId, "dailyRosters", rosterDocId(siteId, floorId || "", date));
   const snap = await getDoc(ref);
   if (!snap.exists()) {
     return { workers: [] };
@@ -268,18 +394,22 @@ export async function getDailyRoster({ siteId, floorId, date }) {
  * workers（作業者マスタ）API
  * ========================= */
 
-export function subscribeWorkers(cb){
-  const col = collection(db, "workers");
+export function subscribeWorkers({ userId, siteId }, cb) {
+  assertUserSite({ userId, siteId });
+  const col = siteCollection(userId, siteId, "workers");
   const q1 = query(col, orderBy("name", "asc"));
-  return onSnapshot(q1, snap => {
-    const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return onSnapshot(q1, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     cb(list);
   });
 }
 
-export async function upsertWorker(worker){
+export async function upsertWorker({ userId, siteId, ...worker }) {
+  assertUserSite({ userId, siteId });
   const id = worker.workerId;
-  const ref = doc(db, "workers", id);
+  if (!id) throw new Error("workerId is required");
+  await ensureSiteMetadata(userId, siteId);
+  const ref = siteDocument(userId, siteId, "workers", id);
   const payload = {
     workerId: id,
     name: worker.name || "",
@@ -288,7 +418,7 @@ export async function upsertWorker(worker){
     agency: worker.agency || "",
     skills: Array.isArray(worker.skills)
       ? worker.skills
-      : (worker.skills||"").split(",").map(s=>s.trim()).filter(Boolean),
+      : (worker.skills || "").split(",").map((s) => s.trim()).filter(Boolean),
     defaultStartTime: worker.defaultStartTime || "",
     defaultEndTime: worker.defaultEndTime || "",
     active: worker.active === true || worker.active === "true" || worker.active === "on",
@@ -296,14 +426,17 @@ export async function upsertWorker(worker){
       color: (worker.panel?.color || worker.panelColor || "") || "",
       badges: Array.isArray(worker.panel?.badges)
         ? worker.panel.badges
-        : (worker.badges||"").split(",").map(s=>s.trim()).filter(Boolean)
+        : (worker.badges || "").split(",").map((s) => s.trim()).filter(Boolean)
     },
-    updatedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
   };
   await setDoc(ref, payload, { merge: true });
   return id;
 }
 
-export async function removeWorker(workerId){
-  await deleteDoc(doc(db, "workers", workerId));
+export async function removeWorker({ userId, siteId, workerId }) {
+  assertUserSite({ userId, siteId });
+  if (!workerId) return;
+  const ref = siteDocument(userId, siteId, "workers", workerId);
+  await deleteDoc(ref);
 }

@@ -70,8 +70,16 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     slot.querySelector(".card").addEventListener("click", async (e) => {
       if (_readOnly) return;
       const id = e.currentTarget.dataset.assignmentId;
+      if (!currentSite?.userId || !currentSite?.siteId) {
+        console.warn("closeAssignment skipped: missing user/site context");
+        return;
+      }
       try {
-        await closeAssignment(id);
+        await closeAssignment({
+          userId: currentSite.userId,
+          siteId: currentSite.siteId,
+          assignmentId: id
+        });
       } catch (err) {
         console.warn("closeAssignment failed", err);
       }
@@ -113,11 +121,16 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         e.preventDefault();
         const type = e.dataTransfer.getData("type");
         const areaId = drop.dataset.areaId;
+        if (!currentSite?.userId || !currentSite?.siteId) {
+          console.warn("drop skipped: missing user/site context");
+          return;
+        }
         if (type === "pool") {
           // 未配置 → IN
           const workerId = e.dataTransfer.getData("workerId");
           try {
             await createAssignment({
+              userId: currentSite.userId,
               siteId: currentSite.siteId,
               floorId: currentSite.floorId,
               areaId,
@@ -133,8 +146,13 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
           const from = e.dataTransfer.getData("fromAreaId");
           if (from === areaId) return; // 同一エリアなら何もしない
           try {
-            await closeAssignment(assignmentId);
+            await closeAssignment({
+              userId: currentSite.userId,
+              siteId: currentSite.siteId,
+              assignmentId
+            });
             await createAssignment({
+              userId: currentSite.userId,
               siteId: currentSite.siteId,
               floorId: currentSite.floorId,
               areaId,

@@ -42,6 +42,14 @@ export function renderUsers(mount){
   `;
   mount.appendChild(wrap);
 
+  if (!state.site?.userId || !state.site?.siteId) {
+    const notice = document.createElement("div");
+    notice.className = "hint";
+    notice.textContent = "ログインし、サイトを選択すると作業者を管理できます。";
+    wrap.appendChild(notice);
+    return;
+  }
+
   const form = wrap.querySelector("#form");
   const tbody = wrap.querySelector("#list tbody");
 
@@ -52,7 +60,11 @@ export function renderUsers(mount){
     const worker = Object.fromEntries(fd.entries());
     if(!worker.workerId){ toast("作業者IDは必須です","error"); return; }
     try{
-      await upsertWorker(worker);
+      await upsertWorker({
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        ...worker
+      });
       toast(`保存しました：${worker.workerId}`);
       form.reset();
       form.querySelector('select[name="active"]').value = "true";
@@ -63,7 +75,12 @@ export function renderUsers(mount){
   });
 
   // 一覧購読
-  const unsub = subscribeWorkers((rows)=>{
+  const unsub = subscribeWorkers(
+    {
+      userId: state.site.userId,
+      siteId: state.site.siteId
+    },
+    (rows)=>{
     tbody.innerHTML = "";
     rows.forEach(w=>{
       const tr = document.createElement("tr");
@@ -112,7 +129,11 @@ export function renderUsers(mount){
         const ok = confirm(`削除しますか？ ${id}`);
         if(!ok) return;
         try {
-          await removeWorker(id);
+          await removeWorker({
+            userId: state.site.userId,
+            siteId: state.site.siteId,
+            workerId: id
+          });
           toast(`削除しました：${id}`);
         } catch (e){
           console.error(e);

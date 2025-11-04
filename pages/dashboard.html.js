@@ -18,6 +18,13 @@ export function renderDashboard(mount) {
   const todayStr = new Date().toISOString().slice(0, 10);
   let selectedDate = state.assignmentDate || todayStr;
   let isReadOnly = selectedDate !== todayStr;
+  if (!state.site?.userId || !state.site?.siteId) {
+    const panel = document.createElement("div");
+    panel.className = "panel";
+    panel.innerHTML = `<div class="hint">サイトが選択されていません。ログインし、サイトを選択してください。</div>`;
+    mount.appendChild(panel);
+    return;
+  }
   const wrap = document.createElement("div");
   wrap.className = "grid twocol";
   wrap.innerHTML = `
@@ -221,11 +228,16 @@ export function renderDashboard(mount) {
   }
 
   // 作業者マスタ購読（色・時間・active・名前）
-  const unsubWorkers = subscribeWorkers((rows) => {
-    const active = rows.filter((w) => w.active);
-    masterWorkers = active
-      .map(toWorkerMaster)
-      .filter((w) => w && w.workerId);
+  const unsubWorkers = subscribeWorkers(
+    {
+      userId: state.site.userId,
+      siteId: state.site.siteId
+    },
+    (rows) => {
+      const active = rows.filter((w) => w.active);
+      masterWorkers = active
+        .map(toWorkerMaster)
+        .filter((w) => w && w.workerId);
     masterWorkerLookup = new Map(
       masterWorkers.map((w) => [w.workerId, { ...w }])
     );
@@ -241,7 +253,8 @@ export function renderDashboard(mount) {
       ])
     );
     reconcile();
-  });
+    }
+  );
 
   function updateViewMode() {
     if (!viewModeEl) return;
@@ -278,7 +291,10 @@ export function renderDashboard(mount) {
     latestAssignmentsAll = [];
     reconcile();
     unsubAssign = subscribeActiveAssignments(
-      { siteId: state.site.siteId },
+      {
+        userId: state.site.userId,
+        siteId: state.site.siteId
+      },
       (rows) => {
         latestAssignmentsAll = dedupeAssignments(rows);
         reconcile();
@@ -296,6 +312,7 @@ export function renderDashboard(mount) {
   async function loadAssignmentsSnapshotForDate(dateStr) {
     try {
       const rows = await getAssignmentsByDate({
+        userId: state.site.userId,
         siteId: state.site.siteId,
         date: dateStr
       });
@@ -343,6 +360,7 @@ export function renderDashboard(mount) {
       targets.map(async (floorId) => {
         try {
           const { workers } = await getDailyRoster({
+            userId: state.site.userId,
             siteId: state.site.siteId,
             floorId,
             date: dateStr
@@ -369,11 +387,18 @@ export function renderDashboard(mount) {
     try {
       unsubAreas();
     } catch {}
-    unsubAreas = subscribeAreas(state.site, (areas) => {
-      areaList = areas;
-      floorApi.setAreas(areaList);
-      reconcile();
-    });
+    unsubAreas = subscribeAreas(
+      {
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        floorId: state.site.floorId
+      },
+      (areas) => {
+        areaList = areas;
+        floorApi.setAreas(areaList);
+        reconcile();
+      }
+    );
   }
 
   function renderFloorOptions() {
@@ -412,11 +437,16 @@ export function renderDashboard(mount) {
     try {
       unsubFloors();
     } catch {}
-    unsubFloors = subscribeFloors(state.site, (floors) => {
-      floorList =
-        Array.isArray(floors) && floors.length
-          ? floors
-          : DEFAULT_FLOORS.slice();
+    unsubFloors = subscribeFloors(
+      {
+        userId: state.site.userId,
+        siteId: state.site.siteId
+      },
+      (floors) => {
+        floorList =
+          Array.isArray(floors) && floors.length
+            ? floors
+            : DEFAULT_FLOORS.slice();
       renderFloorOptions();
       loadRosterForDate(selectedDate).catch((err) => {
         console.error("loadRosterForDate failed", err);
@@ -427,7 +457,8 @@ export function renderDashboard(mount) {
           console.error("handleFloorChange failed", err);
         });
       }
-    });
+      }
+    );
   }
 
   // 日付入力初期化

@@ -39,6 +39,10 @@ export function renderImport(mount) {
   box.querySelector("#hasHeader").value = state.hasHeader ? "1" : "0";
 
   box.querySelector("#run").addEventListener("click", async () => {
+    if (!state.site?.userId || !state.site?.siteId) {
+      toast("ログインし、サイトを選択してください", "error");
+      return;
+    }
     const sheetId = box.querySelector("#sheetId").value.trim();
     const dateStr = box.querySelector("#dateStr").value.trim();
     const col = (box.querySelector("#idCol").value || "A").trim().toUpperCase();
@@ -66,6 +70,8 @@ export function renderImport(mount) {
       let newOrUpdated = 0;
       for (const r of rows) {
         await upsertWorker({
+          userId: state.site.userId,
+          siteId: state.site.siteId,
           workerId: r.workerId,
           name: r.name,
           active: true
@@ -74,7 +80,11 @@ export function renderImport(mount) {
       }
 
       // 自動IN：基本エリアが入っている人のみ（同一サイト・フロアで在籍中判定）
-      const activeNow = await getActiveAssignments(state.site);
+      const activeNow = await getActiveAssignments({
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        floorId: state.site.floorId
+      });
       const assignedSet = new Set(activeNow.map((a) => a.workerId));
       const toAssign = rows.filter(
         (r) => r.areaId && !assignedSet.has(r.workerId)
@@ -83,6 +93,7 @@ export function renderImport(mount) {
       for (const r of toAssign) {
         try {
           await createAssignment({
+            userId: state.site.userId,
             siteId: state.site.siteId,
             floorId: state.site.floorId,
             areaId: r.areaId,
@@ -95,6 +106,7 @@ export function renderImport(mount) {
 
       try {
         await saveDailyRoster({
+          userId: state.site.userId,
           siteId: state.site.siteId,
           floorId: state.site.floorId,
           date: dateStr,

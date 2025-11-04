@@ -9,7 +9,7 @@ export function renderImport(mount) {
   box.className = "panel";
   box.innerHTML = `
     <h2>スプレッドシート取り込み</h2>
-    <div class="form grid two">
+    <div class="form grid twocol">
       <label>シートID<input id="sheetId" placeholder="1abc..."/></label>
       <label>シート名（日付）<input id="dateStr" placeholder="2025-11-04"/></label>
       <label>ID列（A等）<input id="idCol" placeholder="A"/></label>
@@ -20,8 +20,8 @@ export function renderImport(mount) {
         </select>
       </label>
     </div>
-    <div class="btnrow">
-      <button id="run" class="btn">取り込む</button>
+    <div class="form-actions">
+      <button id="run" class="button">取り込む</button>
     </div>
     <div id="result" class="hint"></div>
   `;

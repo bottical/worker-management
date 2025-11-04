@@ -86,12 +86,11 @@ export async function updateAssignmentArea({ assignmentId, areaId }){
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */
 export function subscribeActiveAssignments({ siteId, floorId }, cb){
   const col = collection(db, "assignments");
-  const q1 = query(
-    col,
-    where("siteId","==",siteId),
-    where("floorId","==",floorId),
-    where("outAt","==",null)
-  );
+  const filters = [where("siteId","==",siteId), where("outAt","==",null)];
+  if (floorId) {
+    filters.push(where("floorId","==",floorId));
+  }
+  const q1 = query(col, ...filters);
   return onSnapshot(q1, snap => {
     const rows = snap.docs.map(d => ({ id:d.id, ...d.data() }));
     cb(rows);
@@ -101,12 +100,11 @@ export function subscribeActiveAssignments({ siteId, floorId }, cb){
 /** 在籍中（outAt=null）を一度だけ取得（重複IN防止用） */
 export async function getActiveAssignments({ siteId, floorId }) {
   const col = collection(db, "assignments");
-  const q1 = query(
-    col,
-    where("siteId", "==", siteId),
-    where("floorId", "==", floorId),
-    where("outAt", "==", null)
-  );
+  const filters = [where("siteId", "==", siteId), where("outAt", "==", null)];
+  if (floorId) {
+    filters.push(where("floorId", "==", floorId));
+  }
+  const q1 = query(col, ...filters);
   const snap = await getDocs(q1);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
@@ -115,12 +113,11 @@ export async function getActiveAssignments({ siteId, floorId }) {
 export async function getAssignmentsByDate({ siteId, floorId, date }) {
   if (!date) return [];
   const col = collection(db, "assignments");
-  const q1 = query(
-    col,
-    where("siteId", "==", siteId),
-    where("floorId", "==", floorId),
-    where("date", "==", date)
-  );
+  const filters = [where("siteId", "==", siteId), where("date", "==", date)];
+  if (floorId) {
+    filters.push(where("floorId", "==", floorId));
+  }
+  const q1 = query(col, ...filters);
   const snap = await getDocs(q1);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }

@@ -42,3 +42,5 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .panel-toolbar{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px;align-items:flex-end}
 .panel-toolbar label{display:flex;flex-direction:column;font-size:13px;gap:4px}
 .panel-toolbar input,.panel-toolbar select{padding:8px;border-radius:8px;border:1px solid var(--border);font:inherit}
+.dashboard-pool-panel{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 180px);overflow:hidden}
+.dashboard-pool-panel #pool{flex:1;overflow-y:auto;padding-right:4px}

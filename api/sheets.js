@@ -1,50 +1,75 @@
-import { fetchWithRetry } from "../core/http.js";
+// api/sheets.js
+/**
+ * Googleスプレッドシート（GViz CSV）から
+ * 1列目: 作業者ID
+ * 2列目: 氏名
+ * 3列目: 基本エリアID（任意）
+ * を読み込む。
+ *
+ * 返却: { ids: string[], rows: [{workerId,name,areaId?}] , duplicates: string[] }
+ */
 
-/** 列記号を1つ進める（A→B, Z→AA, AZ→BA） */
-function nextCol(col){
-  const toNum = s => s.split("").reduce((n,c)=> n*26 + (c.charCodeAt(0)-64), 0);
-  const toCol = n => {
-    let s=""; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); }
+function nextCol(col) {
+  // A, B, ... Z, AA, AB ...
+  const toNum = (s) =>
+    s.split("").reduce((n, c) => n * 26 + (c.charCodeAt(0) - 64), 0);
+  const toStr = (n) => {
+    let s = "";
+    while (n > 0) {
+      const r = (n - 1) % 26;
+      s = String.fromCharCode(65 + r) + s;
+      n = Math.floor((n - 1) / 26);
+    }
     return s;
   };
-  return toCol(toNum(col) + 1);
+  return toStr(toNum(col) + 1);
 }
 
-/**
- * ID列と、その右隣の列（名前）を読み込む
- * @returns { ids: string[], pairs: {workerId,name}[], duplicates: string[] }
- */
-export async function readWorkerIdNamePairs({ sheetId, dateStr, idCol, hasHeader }){
+export async function readWorkerRows({ sheetId, dateStr, idCol, hasHeader }) {
   const startRow = hasHeader ? 2 : 1;
   const nameCol = nextCol(idCol.toUpperCase());
-  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(dateStr)}&range=${idCol}${startRow}:${nameCol}9999`;
+  const areaCol = nextCol(nameCol);
+  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+    sheetId
+  )}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
+    dateStr
+  )}&range=${idCol}${startRow}:${areaCol}9999`;
 
-  const text = await fetchWithRetry(url);
+  const res = await fetch(url);
+  const csv = await res.text();
 
-  const lines = text.split(/\r?\n/).filter(l => l.trim().length>0);
-  const pairs = [];
+  const lines = csv
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  const rowsOut = [];
   for (const line of lines) {
-    // 超簡易CSVパース（ダブルクオート除去＋カンマ分割）
-    const cols = line.split(",").map(v => v.replace(/^"|"$/g,"").trim());
+    // 超簡易CSV: ダブルクオート除去→カンマ区切り
+    const cols = line.split(",").map((v) => v.replace(/^"|"$/g, "").trim());
     const workerId = (cols[0] || "").trim();
     const name = (cols[1] || "").trim();
+    const areaId = (cols[2] || "").trim();
     if (!workerId) continue;
-    pairs.push({ workerId, name });
+    rowsOut.push({ workerId, name, areaId });
   }
 
-  // 重複ID検出
+  // 重複除去
   const seen = new Set();
   const dup = new Set();
-  const uniquePairs = [];
-  for (const p of pairs) {
-    if (seen.has(p.workerId)) { dup.add(p.workerId); continue; }
-    seen.add(p.workerId);
-    uniquePairs.push(p);
+  const unique = [];
+  for (const r of rowsOut) {
+    if (seen.has(r.workerId)) {
+      dup.add(r.workerId);
+      continue;
+    }
+    seen.add(r.workerId);
+    unique.push(r);
   }
 
   return {
-    ids: uniquePairs.map(p => p.workerId),
-    pairs: uniquePairs,
+    ids: unique.map((p) => p.workerId),
+    rows: unique,
     duplicates: Array.from(dup)
   };
 }

@@ -56,6 +56,14 @@ export function renderAreas(mount) {
   `;
   mount.appendChild(wrap);
 
+  if (!state.site?.userId || !state.site?.siteId) {
+    const hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = "ログインし、サイトを選択してください。";
+    wrap.appendChild(hint);
+    return;
+  }
+
   const floorForm = wrap.querySelector("#floorForm");
   const clearFloorBtn = wrap.querySelector("#clearFloor");
   const floorRowsEl = wrap.querySelector("#floorRows");
@@ -262,7 +270,11 @@ export function renderAreas(mount) {
       return;
     }
     unsubAreas = subscribeAreas(
-      { siteId: state.site.siteId, floorId: currentFloorId },
+      {
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        floorId: currentFloorId
+      },
       (list) => {
         areas = (list || DEFAULT_AREAS)
           .map((a, idx) => ({
@@ -310,7 +322,12 @@ export function renderAreas(mount) {
     renderFloorSelect();
     updateFloorHint();
     try {
-      await saveFloors({ siteId: state.site.siteId, floors });
+      floors = await saveFloors({
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        siteLabel: state.site.siteId,
+        floors
+      });
       toast(message || "フロアを保存しました");
     } catch (err) {
       console.error("saveFloors failed", err);
@@ -338,6 +355,7 @@ export function renderAreas(mount) {
     renderAreaRows();
     try {
       await saveAreas({
+        userId: state.site.userId,
         siteId: state.site.siteId,
         floorId: currentFloorId,
         areas
@@ -401,7 +419,12 @@ export function renderAreas(mount) {
     switchFloor(e.target.value || "");
   });
 
-  unsubFloors = subscribeFloors(state.site, (list) => {
+  unsubFloors = subscribeFloors(
+    {
+      userId: state.site.userId,
+      siteId: state.site.siteId
+    },
+    (list) => {
     floors = (list || DEFAULT_FLOORS)
       .map((f, idx) => ({
         id: f.id || f.floorId || `F${idx + 1}`,

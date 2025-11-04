@@ -9,19 +9,120 @@
 <body>
   <header class="app-header">
     <div class="brand">在籍管理</div>
-    <nav class="nav">
+    <nav class="nav" id="mainNav">
       <a href="#/dashboard">配置</a>
       <a href="#/import">取込</a>
       <a href="#/areas">エリア管理</a>
       <a href="#/users">ユーザー管理</a>
+      <a href="#/login">ログイン</a>
     </nav>
+    <div class="session" id="sessionControls">
+      <label class="hint" style="margin-right:8px">
+        サイト
+        <select id="siteSelect"></select>
+      </label>
+      <span id="userInfo" class="hint"></span>
+      <button id="logoutBtn" class="button ghost small" type="button">ログアウト</button>
+    </div>
   </header>
   <main id="app"></main>
 
   <!-- ES Modules -->
   <script type="module">
     import { boot } from "./core/router.js";
+    import { attachSiteSubscription } from "./pages/login.html.js";
+    import { state, set, subscribe } from "./core/store.js";
+    import { logout } from "./api/firebase.js";
+    import { toast } from "./core/ui.js";
+
+    const detach = attachSiteSubscription();
     boot();
+
+    const siteSelect = document.getElementById("siteSelect");
+    const sessionControls = document.getElementById("sessionControls");
+    const userInfo = document.getElementById("userInfo");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const nav = document.getElementById("mainNav");
+
+    function updateHeader(){
+      const hasUser = !!state.user;
+      sessionControls.style.display = hasUser ? "flex" : "none";
+      if (nav) {
+        nav.querySelectorAll("a").forEach((link) => {
+          if (link.getAttribute("href") === "#/login") {
+            link.style.display = hasUser ? "none" : "inline";
+          } else {
+            link.style.display = hasUser ? "inline" : "none";
+          }
+        });
+      }
+      if (!hasUser) {
+        if (siteSelect) {
+          siteSelect.innerHTML = "";
+        }
+        if (userInfo) {
+          userInfo.textContent = "";
+        }
+        return;
+      }
+
+      if (userInfo) {
+        const { email, displayName } = state.user;
+        userInfo.textContent = displayName || email || state.user.uid;
+      }
+
+      if (siteSelect) {
+        const options = state.sites && state.sites.length ? state.sites : [];
+        siteSelect.innerHTML = options
+          .map((site) => {
+            const label = site.label || site.name || site.id || "(no name)";
+            return `<option value="${site.id}">${label}</option>`;
+          })
+          .join("");
+        const current = state.site?.siteId;
+        if (current && options.some((s) => s.id === current)) {
+          siteSelect.value = current;
+        } else if (options[0]) {
+          siteSelect.value = options[0].id;
+          set({ site: { userId: state.user.uid, siteId: options[0].id, floorId: options[0].defaultFloorId || "" } });
+        }
+        siteSelect.disabled = options.length <= 1;
+      }
+    }
+
+    subscribe(() => updateHeader());
+    updateHeader();
+
+    if (siteSelect) {
+      siteSelect.addEventListener("change", (e) => {
+        const nextSiteId = e.target.value;
+        const siteMeta = (state.sites || []).find((s) => s.id === nextSiteId) || { defaultFloorId: "" };
+        set({
+          site: {
+            userId: state.user?.uid || null,
+            siteId: nextSiteId,
+            floorId: siteMeta.defaultFloorId || siteMeta.defaultFloor || state.site?.floorId || ""
+          }
+        });
+      });
+    }
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async () => {
+        try {
+          await logout();
+        } catch (err) {
+          console.error("logout failed", err);
+          toast("ログアウトに失敗しました", "error");
+        }
+      });
+    }
+
+    window.addEventListener("beforeunload", () => {
+      try {
+        detach();
+      } catch {}
+    });
   </script>
 </body>
 </html>

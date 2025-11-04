@@ -8,6 +8,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .app-header{display:flex;align-items:center;gap:16px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
 .brand{font-weight:700}
 .nav a{margin-right:12px;color:var(--accent);text-decoration:none}
+.session{margin-left:auto;display:flex;align-items:center;gap:12px}
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
 .grid{display:grid;gap:12px}
 .twocol{grid-template-columns:320px 1fr}
@@ -26,6 +27,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .droparea{display:grid;grid-template-columns:repeat(2, minmax(120px, 1fr));gap:8px;min-height:160px}
 .slot{background:#fff;border:1px dashed var(--border);border-radius:12px;min-height:52px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .button{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--accent);color:#fff;cursor:pointer}
+.button.small{padding:6px 10px;font-size:12px}
 .button.ghost{background:#fff;color:var(--ink)}
 .toast{position:fixed;right:16px;bottom:16px;background:#111827;color:#fff;padding:10px 14px;border-radius:10px;opacity:0;transform:translateY(8px);transition:.25s;z-index:50}
 .toast.show{opacity:1;transform:translateY(0)}

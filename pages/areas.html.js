@@ -75,6 +75,7 @@ export function renderAreas(mount) {
   const areaRowsEl = wrap.querySelector("#areaRows");
 
   let floors = DEFAULT_FLOORS.slice();
+  let floorsLoaded = false;
   let areas = DEFAULT_AREAS.slice();
   let currentFloorId =
     state.site.floorId || floors[0]?.id || DEFAULT_FLOORS[0]?.id || "";
@@ -116,11 +117,13 @@ export function renderAreas(mount) {
       floorSelect.appendChild(opt);
     });
     floorSelect.disabled = list.length === 0;
-    if (!list.some((f) => f.id === currentFloorId)) {
-      currentFloorId = list[0].id;
+    const hasCurrent = list.some((f) => f.id === currentFloorId);
+    const fallbackId = list[0]?.id || "";
+    floorSelect.value = hasCurrent ? currentFloorId : fallbackId;
+    if (!hasCurrent && floorsLoaded && fallbackId) {
+      currentFloorId = fallbackId;
       set({ site: { ...state.site, floorId: currentFloorId } });
     }
-    floorSelect.value = currentFloorId;
   }
 
   function renderFloorRows() {
@@ -310,6 +313,7 @@ export function renderAreas(mount) {
         label: (f.label || "").trim()
       }))
       .filter((f) => f.id);
+    floorsLoaded = true;
     floors = sanitized.length
       ? sanitized.map((f, idx) => ({
           id: f.id,
@@ -424,25 +428,27 @@ export function renderAreas(mount) {
       siteId: state.site.siteId
     },
     (list) => {
-    floors = (list || DEFAULT_FLOORS)
-      .map((f, idx) => ({
-        id: f.id || f.floorId || `F${idx + 1}`,
-        label: f.label || f.name || f.id || `F${idx + 1}`,
-        order: typeof f.order === "number" ? f.order : idx
-      }))
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (!floors.length) {
-      floors = DEFAULT_FLOORS.slice();
+      floorsLoaded = true;
+      floors = (list || DEFAULT_FLOORS)
+        .map((f, idx) => ({
+          id: f.id || f.floorId || `F${idx + 1}`,
+          label: f.label || f.name || f.id || `F${idx + 1}`,
+          order: typeof f.order === "number" ? f.order : idx
+        }))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      if (!floors.length) {
+        floors = DEFAULT_FLOORS.slice();
+      }
+      if (!floors.some((f) => f.id === currentFloorId)) {
+        currentFloorId = floors[0]?.id || "";
+        set({ site: { ...state.site, floorId: currentFloorId } });
+      }
+      renderFloorRows();
+      renderFloorSelect();
+      updateFloorHint();
+      subscribeAreasForFloor();
     }
-    if (!floors.some((f) => f.id === currentFloorId)) {
-      currentFloorId = floors[0]?.id || "";
-      set({ site: { ...state.site, floorId: currentFloorId } });
-    }
-    renderFloorRows();
-    renderFloorSelect();
-    updateFloorHint();
-    subscribeAreasForFloor();
-  });
+  );
 
   subscribeAreasForFloor();
   renderFloorRows();

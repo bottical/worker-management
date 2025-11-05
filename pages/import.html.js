@@ -9,6 +9,9 @@ import {
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
+const DEFAULT_START = "09:00";
+const DEFAULT_END = "18:00";
+
 export function renderImport(mount) {
   const box = document.createElement("div");
   box.className = "panel";
@@ -74,7 +77,9 @@ export function renderImport(mount) {
           siteId: state.site.siteId,
           workerId: r.workerId,
           name: r.name,
-          active: true
+          active: true,
+          defaultStartTime: r.defaultStartTime || DEFAULT_START,
+          defaultEndTime: r.defaultEndTime || DEFAULT_END
         });
         newOrUpdated++;
       }

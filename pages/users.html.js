@@ -2,6 +2,10 @@ import { state } from "../core/store.js";
 import { subscribeWorkers, upsertWorker, removeWorker } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
+const DEFAULT_START = "09:00";
+const DEFAULT_END = "18:00";
+const PAGE_SIZE = 10;
+
 export function renderUsers(mount){
   const wrap = document.createElement("div");
   wrap.className = "panel";
@@ -35,11 +39,21 @@ export function renderUsers(mount){
     <table class="table" id="list">
       <thead>
         <tr>
-          <th>ID</th><th>氏名</th><th>会社</th><th>区分</th><th>派遣元</th><th>skills</th><th>Start</th><th>End</th><th>active</th><th>操作</th>
+          <th data-sort="workerId" data-label="ID">ID</th>
+          <th data-sort="name" data-label="氏名">氏名</th>
+          <th data-sort="company" data-label="会社">会社</th>
+          <th data-sort="employmentType" data-label="区分">区分</th>
+          <th data-sort="agency" data-label="派遣元">派遣元</th>
+          <th data-sort="skills" data-label="skills">skills</th>
+          <th data-sort="defaultStartTime" data-label="Start">Start</th>
+          <th data-sort="defaultEndTime" data-label="End">End</th>
+          <th data-sort="active" data-label="active">active</th>
+          <th>操作</th>
         </tr>
       </thead>
       <tbody></tbody>
     </table>
+    <div id="pager" class="pager" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center"></div>
   `;
   mount.appendChild(wrap);
 
@@ -53,6 +67,17 @@ export function renderUsers(mount){
 
   const form = wrap.querySelector("#form");
   const tbody = wrap.querySelector("#list tbody");
+  const pager = wrap.querySelector("#pager");
+
+  const resetTimeDefaults = ()=>{
+    form.defaultStartTime.value = DEFAULT_START;
+    form.defaultEndTime.value = DEFAULT_END;
+  };
+
+  resetTimeDefaults();
+  form.addEventListener("reset", ()=>{
+    setTimeout(resetTimeDefaults, 0);
+  });
 
   // 保存（新規/更新）
   form.addEventListener("submit", async (e)=>{
@@ -60,6 +85,8 @@ export function renderUsers(mount){
     const fd = new FormData(form);
     const worker = Object.fromEntries(fd.entries());
     if(!worker.workerId){ toast("作業者IDは必須です","error"); return; }
+    worker.defaultStartTime = worker.defaultStartTime || DEFAULT_START;
+    worker.defaultEndTime = worker.defaultEndTime || DEFAULT_END;
     try{
       await upsertWorker({
         userId: state.site.userId,
@@ -69,21 +96,114 @@ export function renderUsers(mount){
       toast(`保存しました：${worker.workerId}`);
       form.reset();
       form.querySelector('select[name="active"]').value = "true";
+      resetTimeDefaults();
     }catch(err){
       console.error(err);
       toast("保存に失敗しました","error");
     }
   });
 
-  // 一覧購読
-  const unsub = subscribeWorkers(
-    {
-      userId: state.site.userId,
-      siteId: state.site.siteId
-    },
-    (rows)=>{
+  let currentRows = [];
+  let sortKey = "workerId";
+  let sortDir = "asc";
+  let currentPage = 1;
+
+  const updateSortIndicators = () => {
+    wrap.querySelectorAll("th[data-sort]").forEach((th)=>{
+      const key = th.dataset.sort;
+      const label = th.dataset.label || th.textContent;
+      let indicator = "";
+      if(key === sortKey){
+        indicator = sortDir === "asc" ? " ▲" : " ▼";
+      }
+      th.textContent = `${label}${indicator}`;
+    });
+  };
+
+  const getFieldValue = (row, key)=>{
+    if(key === "skills"){
+      return (row.skills || []).join(", ");
+    }
+    if(key === "active"){
+      return row.active ? 1 : 0;
+    }
+    if(key === "defaultStartTime"){
+      return row.defaultStartTime || DEFAULT_START;
+    }
+    if(key === "defaultEndTime"){
+      return row.defaultEndTime || DEFAULT_END;
+    }
+    return row[key] ?? "";
+  };
+
+  const renderPager = (totalPages)=>{
+    pager.innerHTML = "";
+    if(totalPages <= 1){
+      pager.style.display = "none";
+      return;
+    }
+    pager.style.display = "flex";
+
+    const makeBtn = (label, disabled, onClick)=>{
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "button ghost";
+      btn.textContent = label;
+      btn.disabled = disabled;
+      btn.addEventListener("click", onClick);
+      return btn;
+    };
+
+    pager.appendChild(makeBtn("前へ", currentPage === 1, ()=>{
+      if(currentPage > 1){
+        currentPage--;
+        renderTable();
+      }
+    }));
+
+    for(let page = 1; page <= totalPages; page++){
+      const btn = makeBtn(String(page), page === currentPage, ()=>{
+        currentPage = page;
+        renderTable();
+      });
+      if(page === currentPage){
+        btn.className = "button";
+      }
+      pager.appendChild(btn);
+    }
+
+    pager.appendChild(makeBtn("次へ", currentPage === totalPages, ()=>{
+      if(currentPage < totalPages){
+        currentPage++;
+        renderTable();
+      }
+    }));
+  };
+
+  const renderTable = ()=>{
+    const rows = [...currentRows];
+    rows.sort((a,b)=>{
+      const av = getFieldValue(a, sortKey);
+      const bv = getFieldValue(b, sortKey);
+      if(typeof av === "number" && typeof bv === "number"){
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      const astr = String(av).toLocaleLowerCase();
+      const bstr = String(bv).toLocaleLowerCase();
+      if(astr === bstr) return 0;
+      const cmp = astr < bstr ? -1 : 1;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if(currentPage > totalPages){
+      currentPage = totalPages;
+    }
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageRows = rows.slice(start, start + PAGE_SIZE);
+
     tbody.innerHTML = "";
-    rows.forEach(w=>{
+    pageRows.forEach(w=>{
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td class="mono">${w.workerId}</td>
@@ -92,8 +212,8 @@ export function renderUsers(mount){
         <td>${w.employmentType||""}</td>
         <td>${w.agency||""}</td>
         <td>${(w.skills||[]).join(", ")}</td>
-        <td>${w.defaultStartTime||""}</td>
-        <td>${w.defaultEndTime||""}</td>
+        <td>${w.defaultStartTime || DEFAULT_START}</td>
+        <td>${w.defaultEndTime || DEFAULT_END}</td>
         <td>${w.active ? "✔" : ""}</td>
         <td class="row-actions">
           <button data-edit="${w.workerId}" class="button ghost">編集</button>
@@ -107,7 +227,7 @@ export function renderUsers(mount){
     tbody.querySelectorAll("button[data-edit]").forEach(btn=>{
       btn.onclick = ()=>{
         const id = btn.dataset.edit;
-        const row = rows.find(r=>r.workerId===id);
+        const row = currentRows.find(r=>r.workerId===id);
         if(!row) return;
         form.workerId.value = row.workerId;
         form.name.value = row.name||"";
@@ -115,8 +235,8 @@ export function renderUsers(mount){
         form.employmentType.value = row.employmentType||"";
         form.agency.value = row.agency||"";
         form.skills.value = (row.skills||[]).join(", ");
-        form.defaultStartTime.value = row.defaultStartTime || "";
-        form.defaultEndTime.value = row.defaultEndTime || "";
+        form.defaultStartTime.value = row.defaultStartTime || DEFAULT_START;
+        form.defaultEndTime.value = row.defaultEndTime || DEFAULT_END;
         form.active.value = row.active ? "true" : "false";
         form.panelColor.value = row.panel?.color || "";
         form.badges.value = (row.panel?.badges||[]).join(", ");
@@ -143,6 +263,38 @@ export function renderUsers(mount){
         }
       };
     });
+
+    renderPager(totalPages);
+    updateSortIndicators();
+  };
+
+  wrap.querySelectorAll("th[data-sort]").forEach((th)=>{
+    th.addEventListener("click", ()=>{
+      const key = th.dataset.sort;
+      if(sortKey === key){
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      }else{
+        sortKey = key;
+        sortDir = "asc";
+      }
+      currentPage = 1;
+      renderTable();
+    });
+  });
+
+  // 一覧購読
+  const unsub = subscribeWorkers(
+    {
+      userId: state.site.userId,
+      siteId: state.site.siteId
+    },
+    (rows)=>{
+    currentRows = rows.map((row)=>({
+      ...row,
+      defaultStartTime: row.defaultStartTime || DEFAULT_START,
+      defaultEndTime: row.defaultEndTime || DEFAULT_END
+    }));
+    renderTable();
   });
 
   // ページ離脱時

@@ -30,9 +30,16 @@ export function boot(){
   window.addEventListener("hashchange", onRoute);
   onRoute();
   subscribe((_, partial) => {
-    if (Object.prototype.hasOwnProperty.call(partial, "user") ||
-        Object.prototype.hasOwnProperty.call(partial, "site")) {
+    // 再描画は「ユーザー変化」または「siteId が変わった場合」に限定
+    if (Object.prototype.hasOwnProperty.call(partial, "user")) {
       onRoute();
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(partial, "site")) {
+      const s = partial.site || {};
+      if (Object.prototype.hasOwnProperty.call(s, "siteId")) {
+        onRoute();
+      }
     }
   });
 }

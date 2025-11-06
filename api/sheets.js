@@ -25,7 +25,42 @@ function nextCol(col) {
   return toStr(toNum(col) + 1);
 }
 
+async function ensureSheetExists({ sheetId, dateStr }) {
+  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+    sheetId
+  )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
+
+  const res = await fetch(metaUrl);
+  if (!res.ok) {
+    const err = new Error(`Failed to fetch sheet meta: ${res.status}`);
+    if (res.status === 404) err.code = "SHEET_NOT_FOUND";
+    throw err;
+  }
+
+  const text = (await res.text()).trim();
+  const match = text.match(/setResponse\((.*)\);?$/s);
+  if (!match) {
+    // 期待したレスポンス形式でない場合は存在確認ができないため続行
+    return;
+  }
+
+  try {
+    const payload = JSON.parse(match[1]);
+    if (payload.status !== "ok") {
+      const err = new Error(
+        payload.errors?.[0]?.message || "Specified sheet not found"
+      );
+      err.code = "SHEET_NOT_FOUND";
+      throw err;
+    }
+  } catch (e) {
+    // JSON.parse失敗時などは存在確認をスキップし、従来処理に委ねる
+  }
+}
+
 export async function readWorkerRows({ sheetId, dateStr, idCol, hasHeader }) {
+  await ensureSheetExists({ sheetId, dateStr });
+
   const startRow = hasHeader ? 2 : 1;
   const nameCol = nextCol(idCol.toUpperCase());
   const areaCol = nextCol(nameCol);

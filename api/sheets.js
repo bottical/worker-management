@@ -84,6 +84,7 @@ export async function readWorkerRows(
     if (res.status === 404) err.code = "SHEET_NOT_FOUND";
     throw err;
   }
+  const contentType = res.headers.get("content-type") || "";
   const csv = await res.text();
 
   const trimmed = csv.trim();
@@ -92,7 +93,11 @@ export async function readWorkerRows(
     /^<html/i.test(trimmed) ||
     /cannot find range/i.test(csv) ||
     /sheet.*not found/i.test(csv) ||
-    /does not exist/i.test(csv)
+    /does not exist/i.test(csv) ||
+    /unable to parse/i.test(csv) ||
+    /invalid (sheet|worksheet)/i.test(csv) ||
+    /^error\s*\:/i.test(trimmed) ||
+    /text\/html/i.test(contentType)
   ) {
     const err = new Error("Specified sheet not found");
     err.code = "SHEET_NOT_FOUND";

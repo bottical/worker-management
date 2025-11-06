@@ -184,7 +184,10 @@ export function renderImport(mount) {
       toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
     } catch (err) {
       console.error(err);
-      const message = "取り込みに失敗しました。設定をご確認ください。";
+      const message =
+        err?.code === "SHEET_NOT_FOUND"
+          ? `シート「${dateStr}」が見つかりません。日付を確認してください。`
+          : "取り込みに失敗しました。設定をご確認ください。";
       toast(message, "error");
       result.textContent = message;
     } finally {

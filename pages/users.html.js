@@ -4,7 +4,8 @@ import { toast } from "../core/ui.js";
 
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "18:00";
-const PAGE_SIZE = 10;
+const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 export function renderUsers(mount){
   const wrap = document.createElement("div");
@@ -35,6 +36,14 @@ export function renderUsers(mount){
         <button class="button ghost" type="reset">クリア</button>
       </div>
     </form>
+
+    <div class="panel-toolbar" id="listControls" style="margin-top:0">
+      <label>表示件数
+        <select id="pageSize">
+          ${PAGE_SIZE_OPTIONS.map((size)=>`<option value="${size}">${size}件</option>`).join("")}
+        </select>
+      </label>
+    </div>
 
     <table class="table" id="list">
       <thead>
@@ -68,6 +77,7 @@ export function renderUsers(mount){
   const form = wrap.querySelector("#form");
   const tbody = wrap.querySelector("#list tbody");
   const pager = wrap.querySelector("#pager");
+  const pageSizeSelect = wrap.querySelector("#pageSize");
 
   const resetTimeDefaults = ()=>{
     form.defaultStartTime.value = DEFAULT_START;
@@ -107,6 +117,15 @@ export function renderUsers(mount){
   let sortKey = "workerId";
   let sortDir = "asc";
   let currentPage = 1;
+  let pageSize = DEFAULT_PAGE_SIZE;
+
+  pageSizeSelect.value = String(pageSize);
+  pageSizeSelect.addEventListener("change", ()=>{
+    const next = Number(pageSizeSelect.value) || DEFAULT_PAGE_SIZE;
+    pageSize = next;
+    currentPage = 1;
+    renderTable();
+  });
 
   const updateSortIndicators = () => {
     wrap.querySelectorAll("th[data-sort]").forEach((th)=>{
@@ -195,12 +214,12 @@ export function renderUsers(mount){
       return sortDir === "asc" ? cmp : -cmp;
     });
 
-    const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
     if(currentPage > totalPages){
       currentPage = totalPages;
     }
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const pageRows = rows.slice(start, start + PAGE_SIZE);
+    const start = (currentPage - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
 
     tbody.innerHTML = "";
     pageRows.forEach(w=>{

@@ -46,3 +46,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .panel-toolbar input,.panel-toolbar select{padding:8px;border-radius:8px;border:1px solid var(--border);font:inherit}
 .dashboard-pool-panel{display:flex;flex-direction:column;gap:8px;max-height:calc(100vh - 180px);overflow:hidden}
 .dashboard-pool-panel #pool{flex:1;overflow-y:auto;padding-right:4px}
+.loading-indicator{display:none;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.loading-indicator.active{display:inline-flex}
+.loading-indicator .spinner{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:spin 0.9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}

@@ -28,8 +28,12 @@ export function renderImport(mount) {
         </select>
       </label>
     </div>
-    <div class="form-actions">
+    <div class="form-actions" style="align-items:center;gap:12px">
       <button id="run" class="button">取り込む</button>
+      <div id="progress" class="loading-indicator" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <span>取り込み中...</span>
+      </div>
     </div>
     <div id="result" class="hint"></div>
   `;
@@ -41,7 +45,22 @@ export function renderImport(mount) {
   box.querySelector("#idCol").value = state.idColumn || "A";
   box.querySelector("#hasHeader").value = state.hasHeader ? "1" : "0";
 
-  box.querySelector("#run").addEventListener("click", async () => {
+  const runBtn = box.querySelector("#run");
+  const progress = box.querySelector("#progress");
+  const result = box.querySelector("#result");
+
+  const setLoading = (loading) => {
+    if (loading) {
+      runBtn.disabled = true;
+      progress.classList.add("active");
+      result.textContent = "";
+    } else {
+      runBtn.disabled = false;
+      progress.classList.remove("active");
+    }
+  };
+
+  runBtn.addEventListener("click", async () => {
     if (!state.site?.userId || !state.site?.siteId) {
       toast("ログインし、サイトを選択してください", "error");
       return;
@@ -56,6 +75,8 @@ export function renderImport(mount) {
       return;
     }
 
+    setLoading(true);
+
     try {
       const { ids, rows, duplicates } = await readWorkerRows({
         sheetId,
@@ -66,6 +87,7 @@ export function renderImport(mount) {
 
       if (!rows.length) {
         toast("シートに作業者が見つかりませんでした", "error");
+        setLoading(false);
         return;
       }
 
@@ -133,7 +155,7 @@ export function renderImport(mount) {
 
       const autoInCount = toAssign.length;
       const dupNote = duplicates.length ? `／重複ID:${duplicates.join(",")}` : "";
-      box.querySelector("#result").textContent = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）${dupNote}`;
+      result.textContent = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）${dupNote}`;
       toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
     } catch (err) {
       console.error(err);
@@ -142,6 +164,8 @@ export function renderImport(mount) {
       } else {
         toast("取り込みに失敗しました。設定をご確認ください。", "error");
       }
+    } finally {
+      setLoading(false);
     }
   });
 }

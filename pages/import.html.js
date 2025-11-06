@@ -1,6 +1,6 @@
 // pages/import.html.js
 import { state, set } from "../core/store.js";
-import { readWorkerRows } from "../api/sheets.js";
+import { ensureSheetExists, readWorkerRows } from "../api/sheets.js";
 import {
   upsertWorker,
   createAssignment,
@@ -77,12 +77,29 @@ export function renderImport(mount) {
     setLoading(true);
 
     try {
-      const { ids, rows, duplicates } = await readWorkerRows({
-        sheetId,
-        dateStr,
-        idCol: col,
-        hasHeader
-      });
+      await ensureSheetExists({ sheetId, dateStr });
+    } catch (err) {
+      console.error("ensureSheetExists failed", err);
+      const message =
+        err?.code === "SHEET_NOT_FOUND"
+          ? `シート「${dateStr}」が見つかりません。日付を確認してください。`
+          : "指定されたシートの確認に失敗しました。設定をご確認ください。";
+      toast(message, "error");
+      result.textContent = message;
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { ids, rows, duplicates } = await readWorkerRows(
+        {
+          sheetId,
+          dateStr,
+          idCol: col,
+          hasHeader
+        },
+        { skipEnsure: true }
+      );
 
       if (!rows.length) {
         toast("シートに作業者が見つかりませんでした", "error");
@@ -116,6 +133,7 @@ export function renderImport(mount) {
         (r) => r.areaId && !assignedSet.has(r.workerId)
       );
 
+      let autoAssignFailures = 0;
       for (const r of toAssign) {
         try {
           await createAssignment({
@@ -127,7 +145,15 @@ export function renderImport(mount) {
           });
         } catch (e) {
           console.warn("auto-assign failed", r.workerId, e);
+          autoAssignFailures++;
         }
+      }
+
+      if (autoAssignFailures > 0) {
+        toast(
+          `自動配置に失敗した作業者が${autoAssignFailures}名います。手動でご確認ください。`,
+          "error"
+        );
       }
 
       try {
@@ -158,15 +184,12 @@ export function renderImport(mount) {
       toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
     } catch (err) {
       console.error(err);
-      if (err?.code === "SHEET_NOT_FOUND") {
-        const message = `シート「${dateStr}」が見つかりません。日付を確認してください。`;
-        toast(message, "error");
-        result.textContent = message;
-      } else {
-        const message = "取り込みに失敗しました。設定をご確認ください。";
-        toast(message, "error");
-        result.textContent = message;
-      }
+      const message =
+        err?.code === "SHEET_NOT_FOUND"
+          ? `シート「${dateStr}」が見つかりません。日付を確認してください。`
+          : "取り込みに失敗しました。設定をご確認ください。";
+      toast(message, "error");
+      result.textContent = message;
     } finally {
       setLoading(false);
     }

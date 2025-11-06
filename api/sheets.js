@@ -25,7 +25,7 @@ function nextCol(col) {
   return toStr(toNum(col) + 1);
 }
 
-async function ensureSheetExists({ sheetId, dateStr }) {
+export async function ensureSheetExists({ sheetId, dateStr }) {
   const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
     sheetId
   )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
@@ -61,8 +61,13 @@ async function ensureSheetExists({ sheetId, dateStr }) {
   }
 }
 
-export async function readWorkerRows({ sheetId, dateStr, idCol, hasHeader }) {
-  await ensureSheetExists({ sheetId, dateStr });
+export async function readWorkerRows(
+  { sheetId, dateStr, idCol, hasHeader },
+  options = {}
+) {
+  if (!options.skipEnsure) {
+    await ensureSheetExists({ sheetId, dateStr });
+  }
 
   const startRow = hasHeader ? 2 : 1;
   const nameCol = nextCol(idCol.toUpperCase());
@@ -79,6 +84,7 @@ export async function readWorkerRows({ sheetId, dateStr, idCol, hasHeader }) {
     if (res.status === 404) err.code = "SHEET_NOT_FOUND";
     throw err;
   }
+  const contentType = res.headers.get("content-type") || "";
   const csv = await res.text();
 
   const trimmed = csv.trim();
@@ -87,7 +93,11 @@ export async function readWorkerRows({ sheetId, dateStr, idCol, hasHeader }) {
     /^<html/i.test(trimmed) ||
     /cannot find range/i.test(csv) ||
     /sheet.*not found/i.test(csv) ||
-    /does not exist/i.test(csv)
+    /does not exist/i.test(csv) ||
+    /unable to parse/i.test(csv) ||
+    /invalid (sheet|worksheet)/i.test(csv) ||
+    /^error\s*\:/i.test(trimmed) ||
+    /text\/html/i.test(contentType)
   ) {
     const err = new Error("Specified sheet not found");
     err.code = "SHEET_NOT_FOUND";

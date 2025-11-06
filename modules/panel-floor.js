@@ -5,7 +5,7 @@ import {
   updateAssignmentArea,
   DEFAULT_AREAS
 } from "../api/firebase.js";
-import { fmtRange } from "../core/ui.js";
+import { fmtRange, toast } from "../core/ui.js";
 
 /**
  * フロア（ゾーン）側の描画と、在籍の反映を担う
@@ -68,6 +68,15 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     `;
   }
 
+  function notifyMissingContext() {
+    toast("サイト情報が不足しているため操作できません", "error");
+  }
+
+  function handleActionError(kind, err) {
+    console.error(`${kind} failed`, err);
+    toast(kind, "error");
+  }
+
   function addSlot(dropEl, workerId, areaId, assignmentId) {
     const slot = document.createElement("div");
     slot.className = "slot";
@@ -77,7 +86,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       if (_readOnly) return;
       const id = e.currentTarget.dataset.assignmentId;
       if (!currentSite?.userId || !currentSite?.siteId) {
-        console.warn("closeAssignment skipped: missing user/site context");
+        notifyMissingContext();
         return;
       }
       try {
@@ -87,7 +96,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
           assignmentId: id
         });
       } catch (err) {
-        console.warn("closeAssignment failed", err);
+        handleActionError("在籍のOUT処理に失敗しました", err);
       }
     });
     // DnD: フロア内移動（エリア間）
@@ -130,12 +139,12 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       const areaId = drop.dataset.areaId;
       const isFallback = drop.dataset.fallback === "true";
       if (!currentSite?.userId || !currentSite?.siteId) {
-        console.warn("drop skipped: missing user/site context");
+        notifyMissingContext();
         return;
       }
       if (type === "pool") {
         if (isFallback) {
-          console.warn("createAssignment skipped: fallback zone is read-only for pool drops");
+          toast("未割当エリアには直接配置できません", "error");
           return;
         }
         // 未配置 → IN
@@ -149,7 +158,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
             workerId
           });
         } catch (err) {
-          console.warn("createAssignment failed", err);
+          handleActionError("配置の登録に失敗しました", err);
         }
       } else if (type === "placed") {
         const assignmentId = e.dataTransfer.getData("assignmentId");
@@ -173,7 +182,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
             });
           }
         } catch (err) {
-          console.warn("updateAssignmentArea failed", err);
+          handleActionError("配置エリアの更新に失敗しました", err);
         }
       }
     });

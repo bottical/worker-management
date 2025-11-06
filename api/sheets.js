@@ -25,7 +25,7 @@ function nextCol(col) {
   return toStr(toNum(col) + 1);
 }
 
-async function ensureSheetExists({ sheetId, dateStr }) {
+export async function ensureSheetExists({ sheetId, dateStr }) {
   const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
     sheetId
   )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
@@ -61,8 +61,13 @@ async function ensureSheetExists({ sheetId, dateStr }) {
   }
 }
 
-export async function readWorkerRows({ sheetId, dateStr, idCol, hasHeader }) {
-  await ensureSheetExists({ sheetId, dateStr });
+export async function readWorkerRows(
+  { sheetId, dateStr, idCol, hasHeader },
+  options = {}
+) {
+  if (!options.skipEnsure) {
+    await ensureSheetExists({ sheetId, dateStr });
+  }
 
   const startRow = hasHeader ? 2 : 1;
   const nameCol = nextCol(idCol.toUpperCase());

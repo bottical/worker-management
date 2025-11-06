@@ -50,13 +50,12 @@ export function renderImport(mount) {
   const result = box.querySelector("#result");
 
   const setLoading = (loading) => {
+    runBtn.disabled = loading;
+    progress.classList.toggle("active", loading);
+    progress.setAttribute("aria-hidden", loading ? "false" : "true");
+    progress.hidden = !loading;
     if (loading) {
-      runBtn.disabled = true;
-      progress.classList.add("active");
       result.textContent = "";
-    } else {
-      runBtn.disabled = false;
-      progress.classList.remove("active");
     }
   };
 
@@ -160,9 +159,13 @@ export function renderImport(mount) {
     } catch (err) {
       console.error(err);
       if (err?.code === "SHEET_NOT_FOUND") {
-        toast(`シート「${dateStr}」が見つかりません。日付を確認してください。`, "error");
+        const message = `シート「${dateStr}」が見つかりません。日付を確認してください。`;
+        toast(message, "error");
+        result.textContent = message;
       } else {
-        toast("取り込みに失敗しました。設定をご確認ください。", "error");
+        const message = "取り込みに失敗しました。設定をご確認ください。";
+        toast(message, "error");
+        result.textContent = message;
       }
     } finally {
       setLoading(false);

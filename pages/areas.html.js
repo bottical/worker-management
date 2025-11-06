@@ -265,7 +265,9 @@ export function renderAreas(mount) {
   function subscribeAreasForFloor() {
     try {
       unsubAreas();
-    } catch {}
+    } catch (err) {
+      console.warn("unsubAreas failed", err);
+    }
     areas = [];
     renderAreaRows();
     updateFloorHint();
@@ -461,10 +463,14 @@ export function renderAreas(mount) {
     () => {
       try {
         unsubFloors();
-      } catch {}
+      } catch (err) {
+        console.warn("unsubFloors failed", err);
+      }
       try {
         unsubAreas();
-      } catch {}
+      } catch (err) {
+        console.warn("unsubAreas failed", err);
+      }
     },
     { once: true }
   );

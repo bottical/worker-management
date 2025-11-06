@@ -94,10 +94,21 @@ export function renderImport(mount) {
       console.info("[Import] sheet verified");
     } catch (err) {
       console.error("[Import] ensureSheetExists failed", err);
-      const message =
-        err?.code === "SHEET_NOT_FOUND"
-          ? `シート「${dateStr}」が見つかりません。日付を確認してください。`
-          : "指定されたシートの確認に失敗しました。設定をご確認ください。";
+      let message;
+      if (err?.code === "SHEET_NOT_FOUND") {
+        const suggestions = Array.isArray(err.availableSheets)
+          ? err.availableSheets.join(", ")
+          : "";
+        message = `シート「${dateStr}」が見つかりません。日付を確認してください。`;
+        if (suggestions) {
+          const hint = `利用可能なシート: ${suggestions}`;
+          console.info("[Import] available sheets", err.availableSheets);
+          message += `\n${hint}`;
+        }
+      } else {
+        message = "指定されたシートの確認に失敗しました。設定をご確認ください。";
+      }
+
       toast(message, "error");
       result.textContent = message;
       setLoading(false);

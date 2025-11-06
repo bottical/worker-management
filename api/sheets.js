@@ -40,8 +40,9 @@ async function ensureSheetExists({ sheetId, dateStr }) {
   const text = (await res.text()).trim();
   const match = text.match(/setResponse\((.*)\);?$/s);
   if (!match) {
-    // 期待したレスポンス形式でない場合は存在確認ができないため続行
-    return;
+    const err = new Error("Specified sheet not found");
+    err.code = "SHEET_NOT_FOUND";
+    throw err;
   }
 
   try {

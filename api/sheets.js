@@ -25,17 +25,15 @@ function nextCol(col) {
   return toStr(toNum(col) + 1);
 }
 
-export async function ensureSheetExists({ sheetId, dateStr }) {
-  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
-    sheetId
-  )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
+const GVIZ_RESPONSE_PATTERN = /setResponse\((.*)\);?$/s;
 
-  console.debug("[Sheets] ensureSheetExists fetch", { metaUrl });
-  const res = await fetch(metaUrl);
+async function fetchGvizPayload(url, { feature }) {
+  console.debug(`[Sheets] ${feature} fetch`, { url });
+  const res = await fetch(url);
   if (!res.ok) {
-    const err = new Error(`Failed to fetch sheet meta: ${res.status}`);
+    const err = new Error(`Failed to fetch ${feature}: ${res.status}`);
     if (res.status === 404) err.code = "SHEET_NOT_FOUND";
-    console.warn("[Sheets] ensureSheetExists response not ok", {
+    console.warn(`[Sheets] ${feature} response not ok`, {
       status: res.status,
       statusText: res.statusText
     });
@@ -43,27 +41,80 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
   }
 
   const text = (await res.text()).trim();
-  console.debug("[Sheets] ensureSheetExists payload", text.slice(0, 120));
-  const match = text.match(/setResponse\((.*)\);?$/s);
+  console.debug(`[Sheets] ${feature} payload`, text.slice(0, 160));
+  const match = text.match(GVIZ_RESPONSE_PATTERN);
   if (!match) {
     const err = new Error("Specified sheet not found");
     err.code = "SHEET_NOT_FOUND";
-    console.warn("[Sheets] ensureSheetExists missing setResponse marker");
+    console.warn(`[Sheets] ${feature} missing setResponse marker`);
     throw err;
   }
 
   try {
-    const payload = JSON.parse(match[1]);
-    console.debug("[Sheets] ensureSheetExists parsed status", payload.status);
-    if (payload.status !== "ok") {
-      const err = new Error(
-        payload.errors?.[0]?.message || "Specified sheet not found"
-      );
-      err.code = "SHEET_NOT_FOUND";
-      throw err;
-    }
+    return JSON.parse(match[1]);
   } catch (e) {
     const err = new Error("Specified sheet not found");
+    err.code = "SHEET_NOT_FOUND";
+    console.warn(`[Sheets] ${feature} JSON parse failed`, e);
+    throw err;
+  }
+}
+
+export async function listSheets(sheetId) {
+  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+    sheetId
+  )}/gviz/sheetmetadata`;
+  const payload = await fetchGvizPayload(url, { feature: "listSheets" });
+
+  if (payload.status !== "ok") {
+    const err = new Error(
+      payload.errors?.[0]?.message || "Failed to read sheet metadata"
+    );
+    err.code = "SHEET_NOT_FOUND";
+    throw err;
+  }
+
+  const rows = payload.table?.rows || [];
+  const cols = payload.table?.cols || [];
+  const titleIndex = cols.findIndex((col) =>
+    typeof col.label === "string" && /title|name/i.test(col.label)
+  );
+
+  const titles = [];
+  for (const row of rows) {
+    const cells = row.c || [];
+    const cell =
+      titleIndex >= 0
+        ? cells[titleIndex]
+        : cells.find((c) => typeof c?.v === "string" && c.v.trim().length > 0);
+    const value = cell?.v || cell?.f;
+    if (typeof value === "string" && value.trim().length > 0) {
+      titles.push(value.trim());
+    }
+  }
+
+  return Array.from(new Set(titles));
+}
+
+export async function ensureSheetExists({ sheetId, dateStr }) {
+  const sheets = await listSheets(sheetId);
+  console.debug("[Sheets] ensureSheetExists available", sheets);
+  if (!sheets.includes(dateStr)) {
+    const err = new Error("Specified sheet not found");
+    err.code = "SHEET_NOT_FOUND";
+    err.availableSheets = sheets;
+    throw err;
+  }
+
+  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+    sheetId
+  )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
+
+  const payload = await fetchGvizPayload(metaUrl, { feature: "ensureSheetExists" });
+  if (payload.status !== "ok") {
+    const err = new Error(
+      payload.errors?.[0]?.message || "Specified sheet not found"
+    );
     err.code = "SHEET_NOT_FOUND";
     throw err;
   }

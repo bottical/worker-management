@@ -108,6 +108,8 @@ export function attachSiteSubscription() {
   return () => {
     try {
       unsubscribe();
-    } catch {}
+    } catch (err) {
+      console.warn("unsubscribe login sites failed", err);
+    }
   };
 }

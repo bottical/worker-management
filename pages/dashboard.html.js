@@ -305,7 +305,9 @@ export function renderDashboard(mount) {
   function stopLiveSubscription() {
     try {
       unsubAssign?.();
-    } catch {}
+    } catch (err) {
+      console.warn("unsubAssign failed", err);
+    }
     unsubAssign = () => {};
   }
 
@@ -386,7 +388,9 @@ export function renderDashboard(mount) {
   function subscribeAreasForCurrentFloor() {
     try {
       unsubAreas();
-    } catch {}
+    } catch (err) {
+      console.warn("unsubAreas failed", err);
+    }
     unsubAreas = subscribeAreas(
       {
         userId: state.site.userId,
@@ -436,7 +440,9 @@ export function renderDashboard(mount) {
   function subscribeFloorsForSite() {
     try {
       unsubFloors();
-    } catch {}
+    } catch (err) {
+      console.warn("unsubFloors failed", err);
+    }
     unsubFloors = subscribeFloors(
       {
         userId: state.site.userId,
@@ -495,16 +501,24 @@ export function renderDashboard(mount) {
       stopLiveSubscription();
       try {
         unsubWorkers();
-      } catch {}
+      } catch (err) {
+        console.warn("unsubWorkers failed", err);
+      }
       try {
         unsubAreas();
-      } catch {}
+      } catch (err) {
+        console.warn("unsubAreas failed", err);
+      }
       try {
         unsubFloors();
-      } catch {}
+      } catch (err) {
+        console.warn("unsubFloors failed", err);
+      }
       try {
         floorApi.unmount?.();
-      } catch {}
+      } catch (err) {
+        console.error("floorApi.unmount failed", err);
+      }
     },
     { once: true }
   );

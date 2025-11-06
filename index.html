@@ -121,7 +121,9 @@
     window.addEventListener("beforeunload", () => {
       try {
         detach();
-      } catch {}
+      } catch (err) {
+        console.warn("detach failed", err);
+      }
     });
   </script>
 </body>

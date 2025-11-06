@@ -1,6 +1,6 @@
 // pages/import.html.js
 import { state, set } from "../core/store.js";
-import { readWorkerRows } from "../api/sheets.js";
+import { ensureSheetExists, readWorkerRows } from "../api/sheets.js";
 import {
   upsertWorker,
   createAssignment,
@@ -60,8 +60,11 @@ export function renderImport(mount) {
   };
 
   runBtn.addEventListener("click", async () => {
+    console.groupCollapsed("[Import] run clicked");
     if (!state.site?.userId || !state.site?.siteId) {
+      console.warn("[Import] missing site context", state.site);
       toast("ログインし、サイトを選択してください", "error");
+      console.groupEnd();
       return;
     }
     const sheetId = box.querySelector("#sheetId").value.trim();
@@ -69,29 +72,68 @@ export function renderImport(mount) {
     const col = (box.querySelector("#idCol").value || "A").trim().toUpperCase();
     const hasHeader = box.querySelector("#hasHeader").value === "1";
 
+    console.info("[Import] parameters", {
+      sheetId: sheetId.slice(0, 6) + (sheetId.length > 6 ? "…" : ""),
+      dateStr,
+      col,
+      hasHeader
+    });
+
     if (!sheetId || !dateStr) {
+      console.warn("[Import] missing required fields", { sheetId, dateStr });
       toast("シートIDとシート名（日付）を入力してください");
+      console.groupEnd();
       return;
     }
 
     setLoading(true);
 
     try {
-      const { ids, rows, duplicates } = await readWorkerRows({
-        sheetId,
-        dateStr,
-        idCol: col,
-        hasHeader
+      console.info("[Import] ensuring sheet exists");
+      await ensureSheetExists({ sheetId, dateStr });
+      console.info("[Import] sheet verified");
+    } catch (err) {
+      console.error("[Import] ensureSheetExists failed", err);
+      const message =
+        err?.code === "SHEET_NOT_FOUND"
+          ? `シート「${dateStr}」が見つかりません。日付を確認してください。`
+          : "指定されたシートの確認に失敗しました。設定をご確認ください。";
+      toast(message, "error");
+      result.textContent = message;
+      setLoading(false);
+      console.groupEnd();
+      return;
+    }
+
+    try {
+      console.info("[Import] reading worker rows");
+      const { ids, rows, duplicates } = await readWorkerRows(
+        {
+          sheetId,
+          dateStr,
+          idCol: col,
+          hasHeader
+        },
+        { skipEnsure: true }
+      );
+
+      console.info("[Import] rows fetched", {
+        idCount: ids.length,
+        rowCount: rows.length,
+        duplicates
       });
 
       if (!rows.length) {
+        console.warn("[Import] no workers found");
         toast("シートに作業者が見つかりませんでした", "error");
         setLoading(false);
+        console.groupEnd();
         return;
       }
 
       // マスタUpsert
       let newOrUpdated = 0;
+      console.info("[Import] upserting workers", rows.length);
       for (const r of rows) {
         await upsertWorker({
           userId: state.site.userId,
@@ -116,6 +158,12 @@ export function renderImport(mount) {
         (r) => r.areaId && !assignedSet.has(r.workerId)
       );
 
+      console.info("[Import] auto-assign candidates", {
+        activeAssignments: activeNow.length,
+        candidates: toAssign.length
+      });
+
+      let autoAssignFailures = 0;
       for (const r of toAssign) {
         try {
           await createAssignment({
@@ -126,8 +174,21 @@ export function renderImport(mount) {
             workerId: r.workerId
           });
         } catch (e) {
-          console.warn("auto-assign failed", r.workerId, e);
+          console.warn("[Import] auto-assign failed", r.workerId, e);
+          autoAssignFailures++;
         }
+      }
+
+      console.info("[Import] auto-assign complete", {
+        attempted: toAssign.length,
+        failed: autoAssignFailures
+      });
+
+      if (autoAssignFailures > 0) {
+        toast(
+          `自動配置に失敗した作業者が${autoAssignFailures}名います。手動でご確認ください。`,
+          "error"
+        );
       }
 
       try {
@@ -139,7 +200,7 @@ export function renderImport(mount) {
           workers: rows
         });
       } catch (err) {
-        console.error("saveDailyRoster failed", err);
+        console.error("[Import] saveDailyRoster failed", err);
         toast("日次の作業者リストの保存に失敗しました", "error");
       }
 
@@ -157,18 +218,16 @@ export function renderImport(mount) {
       result.textContent = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）${dupNote}`;
       toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
     } catch (err) {
-      console.error(err);
-      if (err?.code === "SHEET_NOT_FOUND") {
-        const message = `シート「${dateStr}」が見つかりません。日付を確認してください。`;
-        toast(message, "error");
-        result.textContent = message;
-      } else {
-        const message = "取り込みに失敗しました。設定をご確認ください。";
-        toast(message, "error");
-        result.textContent = message;
-      }
+      console.error("[Import] unexpected failure", err);
+      const message =
+        err?.code === "SHEET_NOT_FOUND"
+          ? `シート「${dateStr}」が見つかりません。日付を確認してください。`
+          : "取り込みに失敗しました。設定をご確認ください。";
+      toast(message, "error");
+      result.textContent = message;
     } finally {
       setLoading(false);
+      console.groupEnd();
     }
   });
 }

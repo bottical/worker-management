@@ -30,23 +30,31 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     sheetId
   )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
 
+  console.debug("[Sheets] ensureSheetExists fetch", { metaUrl });
   const res = await fetch(metaUrl);
   if (!res.ok) {
     const err = new Error(`Failed to fetch sheet meta: ${res.status}`);
     if (res.status === 404) err.code = "SHEET_NOT_FOUND";
+    console.warn("[Sheets] ensureSheetExists response not ok", {
+      status: res.status,
+      statusText: res.statusText
+    });
     throw err;
   }
 
   const text = (await res.text()).trim();
+  console.debug("[Sheets] ensureSheetExists payload", text.slice(0, 120));
   const match = text.match(/setResponse\((.*)\);?$/s);
   if (!match) {
     const err = new Error("Specified sheet not found");
     err.code = "SHEET_NOT_FOUND";
+    console.warn("[Sheets] ensureSheetExists missing setResponse marker");
     throw err;
   }
 
   try {
     const payload = JSON.parse(match[1]);
+    console.debug("[Sheets] ensureSheetExists parsed status", payload.status);
     if (payload.status !== "ok") {
       const err = new Error(
         payload.errors?.[0]?.message || "Specified sheet not found"
@@ -66,6 +74,7 @@ export async function readWorkerRows(
   options = {}
 ) {
   if (!options.skipEnsure) {
+    console.debug("[Sheets] readWorkerRows running ensureSheetExists");
     await ensureSheetExists({ sheetId, dateStr });
   }
 
@@ -78,14 +87,27 @@ export async function readWorkerRows(
     dateStr
   )}&range=${idCol}${startRow}:${areaCol}9999`;
 
+  console.debug("[Sheets] readWorkerRows fetch", {
+    url,
+    startRow,
+    idCol,
+    nameCol,
+    areaCol
+  });
   const res = await fetch(url);
   if (!res.ok) {
     const err = new Error(`Failed to fetch sheet: ${res.status}`);
     if (res.status === 404) err.code = "SHEET_NOT_FOUND";
+    console.warn("[Sheets] readWorkerRows response not ok", {
+      status: res.status,
+      statusText: res.statusText
+    });
     throw err;
   }
   const contentType = res.headers.get("content-type") || "";
   const csv = await res.text();
+  console.debug("[Sheets] readWorkerRows contentType", contentType);
+  console.debug("[Sheets] readWorkerRows sample", csv.slice(0, 120));
 
   const trimmed = csv.trim();
   if (
@@ -101,6 +123,7 @@ export async function readWorkerRows(
   ) {
     const err = new Error("Specified sheet not found");
     err.code = "SHEET_NOT_FOUND";
+    console.warn("[Sheets] readWorkerRows detected error payload");
     throw err;
   }
 
@@ -132,6 +155,12 @@ export async function readWorkerRows(
     seen.add(r.workerId);
     unique.push(r);
   }
+
+  console.debug("[Sheets] readWorkerRows parsed", {
+    totalLines: lines.length,
+    uniqueCount: unique.length,
+    duplicates: dup.size
+  });
 
   return {
     ids: unique.map((p) => p.workerId),

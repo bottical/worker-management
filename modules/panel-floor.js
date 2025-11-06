@@ -69,11 +69,12 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   }
 
   function notifyMissingContext() {
+    console.warn("[Floor] action blocked due to missing context", currentSite);
     toast("サイト情報が不足しているため操作できません", "error");
   }
 
   function handleActionError(kind, err) {
-    console.error(`${kind} failed`, err);
+    console.error(`[Floor] ${kind}`, err);
     toast(kind, "error");
   }
 
@@ -90,6 +91,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         return;
       }
       try {
+        console.info("[Floor] closing assignment", { assignmentId: id });
         await closeAssignment({
           userId: currentSite.userId,
           siteId: currentSite.siteId,
@@ -149,6 +151,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         }
         // 未配置 → IN
         const workerId = e.dataTransfer.getData("workerId");
+        console.info("[Floor] creating assignment", { workerId, areaId });
         try {
           await createAssignment({
             userId: currentSite.userId,
@@ -165,6 +168,12 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         const workerId = e.dataTransfer.getData("workerId");
         const from = e.dataTransfer.getData("fromAreaId");
         if (from === areaId) return; // 同一エリアなら何もしない
+        console.info("[Floor] updating assignment area", {
+          assignmentId,
+          workerId,
+          from,
+          to: isFallback ? FALLBACK_AREA_ID : areaId
+        });
         try {
           if (isFallback) {
             await updateAssignmentArea({

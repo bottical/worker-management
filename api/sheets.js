@@ -55,7 +55,9 @@ async function ensureSheetExists({ sheetId, dateStr }) {
       throw err;
     }
   } catch (e) {
-    // JSON.parse失敗時などは存在確認をスキップし、従来処理に委ねる
+    const err = new Error("Specified sheet not found");
+    err.code = "SHEET_NOT_FOUND";
+    throw err;
   }
 }
 

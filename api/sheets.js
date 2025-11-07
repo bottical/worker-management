@@ -63,7 +63,7 @@ async function fetchGvizPayload(url, { feature }) {
 export async function listSheets(sheetId) {
   const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
     sheetId
-  )}/gviz/sheetmetadata`;
+  )}/gviz/sheetmetadata?tqx=out:json`;
   const payload = await fetchGvizPayload(url, { feature: "listSheets" });
 
   if (payload.status !== "ok") {

@@ -112,15 +112,10 @@ export function renderImport(mount) {
       console.error("[Import] ensureSheetExists failed", err);
       let message;
       if (err?.code === "SHEET_NOT_FOUND") {
-        const suggestions = Array.isArray(err.availableSheets)
-          ? err.availableSheets.join(", ")
-          : "";
         message = `シート「${dateStr}」が見つかりません。日付を確認してください。`;
-        if (suggestions) {
-          const hint = `利用可能なシート: ${suggestions}`;
-          console.info("[Import] available sheets", err.availableSheets);
-          message += `\n${hint}`;
-        }
+      } else if (err?.code === "SHEET_NAME_MISMATCH") {
+        const actual = err?.actual ? `（シート内の値: ${err.actual}）` : "";
+        message = `シート名（日付）の指定とシート内A1セルの値が一致しません${actual}。`;
       } else if (err?.code === "SHEET_ACCESS_DENIED") {
         message =
           "シートへのアクセスが拒否されました。公開設定やAPIキーの権限を確認してください。";

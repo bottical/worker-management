@@ -33,6 +33,7 @@ async function fetchGvizPayload(url, { feature }) {
   if (!res.ok) {
     const err = new Error(`Failed to fetch ${feature}: ${res.status}`);
     if (res.status === 404) err.code = "SHEET_NOT_FOUND";
+    err.status = res.status;
     console.warn(`[Sheets] ${feature} response not ok`, {
       status: res.status,
       statusText: res.statusText
@@ -60,11 +61,56 @@ async function fetchGvizPayload(url, { feature }) {
   }
 }
 
+async function listSheetsFromWorksheetFeed(sheetId) {
+  const url = `https://spreadsheets.google.com/feeds/worksheets/${encodeURIComponent(
+    sheetId
+  )}/public/full?alt=json`;
+  console.debug("[Sheets] listSheets fallback fetch", { url });
+  const res = await fetch(url);
+  if (!res.ok) {
+    const err = new Error(`Failed to fetch listSheets: ${res.status}`);
+    if (res.status === 404) err.code = "SHEET_NOT_FOUND";
+    err.status = res.status;
+    console.warn("[Sheets] listSheets fallback response not ok", {
+      status: res.status,
+      statusText: res.statusText
+    });
+    throw err;
+  }
+
+  try {
+    const data = await res.json();
+    const entries = data?.feed?.entry || [];
+    const titles = entries
+      .map((entry) => entry?.title?.$t)
+      .filter((title) => typeof title === "string" && title.trim().length > 0)
+      .map((title) => title.trim());
+    return Array.from(new Set(titles));
+  } catch (e) {
+    console.warn("[Sheets] listSheets fallback JSON parse failed", e);
+    const err = new Error("Failed to parse worksheet feed");
+    err.code = "SHEET_NOT_FOUND";
+    throw err;
+  }
+}
+
 export async function listSheets(sheetId) {
   const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
     sheetId
-  )}/gviz/sheetmetadata`;
-  const payload = await fetchGvizPayload(url, { feature: "listSheets" });
+  )}/gviz/sheetmetadata?tqx=out:json`;
+  let payload;
+  try {
+    payload = await fetchGvizPayload(url, { feature: "listSheets" });
+  } catch (err) {
+    if (err.code === "SHEET_NOT_FOUND") {
+      console.info("[Sheets] listSheets falling back to worksheet feed");
+      const fallbackSheets = await listSheetsFromWorksheetFeed(sheetId);
+      if (fallbackSheets.length > 0) {
+        return fallbackSheets;
+      }
+    }
+    throw err;
+  }
 
   if (payload.status !== "ok") {
     const err = new Error(
@@ -97,25 +143,42 @@ export async function listSheets(sheetId) {
 }
 
 export async function ensureSheetExists({ sheetId, dateStr }) {
-  const sheets = await listSheets(sheetId);
-  console.debug("[Sheets] ensureSheetExists available", sheets);
-  if (!sheets.includes(dateStr)) {
-    const err = new Error("Specified sheet not found");
-    err.code = "SHEET_NOT_FOUND";
-    err.availableSheets = sheets;
+  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+    sheetId
+  )}/gviz/tq?sheet=${encodeURIComponent(
+    dateStr
+  )}&headers=1&range=A1:A1&tqx=out:json`;
+
+  let payload;
+  try {
+    payload = await fetchGvizPayload(metaUrl, { feature: "ensureSheetExists" });
+  } catch (err) {
+    if (err.code === "SHEET_NOT_FOUND") {
+      try {
+        const sheets = await listSheets(sheetId);
+        if (Array.isArray(sheets) && sheets.length > 0) {
+          err.availableSheets = sheets;
+        }
+      } catch (listErr) {
+        console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
+      }
+    }
     throw err;
   }
 
-  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
-    sheetId
-  )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
-
-  const payload = await fetchGvizPayload(metaUrl, { feature: "ensureSheetExists" });
   if (payload.status !== "ok") {
     const err = new Error(
       payload.errors?.[0]?.message || "Specified sheet not found"
     );
     err.code = "SHEET_NOT_FOUND";
+    try {
+      const sheets = await listSheets(sheetId);
+      if (Array.isArray(sheets) && sheets.length > 0) {
+        err.availableSheets = sheets;
+      }
+    } catch (listErr) {
+      console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
+    }
     throw err;
   }
 }

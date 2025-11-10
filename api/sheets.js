@@ -130,84 +130,24 @@ async function fetchValueRange({
   return valueRange?.values || [];
 }
 
-export async function listSheets(sheetId) {
-  let data;
-  try {
-    data = await fetchSheetsApi(
-      buildSheetsApiUrl(`${encodeURIComponent(sheetId)}`, {
-        fields: "sheets.properties.title"
-      }),
-      { feature: "listSheets" }
-    );
-  } catch (err) {
-    if (err.code === "SHEET_ACCESS_DENIED") {
-      console.info("[Sheets] listSheets not accessible", err.details || err);
-      return undefined;
-    }
-    throw err;
-  }
-
-  const titles = (data?.sheets || [])
-    .map((sheet) => sheet?.properties?.title)
-    .filter((title) => typeof title === "string" && title.trim().length > 0)
-    .map((title) => title.trim());
-
-  return Array.from(new Set(titles));
-}
-
 export async function ensureSheetExists({ sheetId, dateStr }) {
-  let availableSheets;
-  let listSheetsError;
   try {
-    availableSheets = await listSheets(sheetId);
-  } catch (err) {
-    listSheetsError = err;
-    if (err.code !== "SHEET_NOT_FOUND") {
-      console.warn("[Sheets] ensureSheetExists listSheets failed", err);
-    }
-  }
-
-  if (Array.isArray(availableSheets)) {
-    const exists = availableSheets.some(
-      (title) => typeof title === "string" && title.trim() === dateStr
-    );
-    if (exists) return;
-    // 一覧は取れたが目的タブがない → この時だけエラー
-    const err = new Error("Specified sheet not found");
-    err.code = "SHEET_NOT_FOUND";
-    err.availableSheets = availableSheets;
-    throw err;
-  }
-
-  try {
-    await fetchValueRange({
+    const values = await fetchValueRange({
       sheetId,
       sheetTitle: dateStr,
       startCell: "A1",
       endCell: "A1",
       feature: "ensureSheetExists"
     });
-  } catch (err) {
-    if (err.code === "SHEET_NOT_FOUND" && Array.isArray(availableSheets)) {
-      err.availableSheets = availableSheets;
-    } else if (
-      err.code === "SHEET_NOT_FOUND" &&
-      Array.isArray(listSheetsError?.availableSheets)
-    ) {
-      err.availableSheets = listSheetsError.availableSheets;
-    } else if (err.code === "SHEET_NOT_FOUND") {
-      try {
-        const sheets = await listSheets(sheetId);
-        if (Array.isArray(sheets) && sheets.length > 0) {
-          err.availableSheets = sheets;
-        }
-      } catch (listErr) {
-        console.warn(
-          "[Sheets] ensureSheetExists failed to list sheets after fetch",
-          listErr
-        );
-      }
+    const sheetName = String(values?.[0]?.[0] ?? "").trim();
+    if (!sheetName || sheetName !== dateStr) {
+      const err = new Error("Sheet name cell does not match requested sheet");
+      err.code = "SHEET_NAME_MISMATCH";
+      err.expected = dateStr;
+      err.actual = sheetName;
+      throw err;
     }
+  } catch (err) {
     throw err;
   }
 
@@ -223,7 +163,7 @@ export async function readWorkerRows(
     await ensureSheetExists({ sheetId, dateStr });
   }
 
-  const startRow = hasHeader ? 2 : 1;
+  const startRow = hasHeader ? 3 : 2;
   const idColumn = (idCol || "A").toUpperCase();
   const nameCol = nextCol(idColumn);
   const areaCol = nextCol(nameCol);

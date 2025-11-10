@@ -153,7 +153,7 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     console.warn("[Sheets] ensureSheetExists listSheets failed", err);
   }
 
-  if (Array.isArray(availableSheets) && availableSheets.length > 0) {
+  if (Array.isArray(availableSheets)) {
     const exists = availableSheets.some(
       (title) => typeof title === "string" && title.trim() === dateStr
     );

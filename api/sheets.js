@@ -149,6 +149,9 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     availableSheets = await listSheets(sheetId);
   } catch (err) {
     listSheetsError = err;
+    if (err.code === "SHEET_NOT_FOUND") {
+      throw err;
+    }
     if (err.code !== "SHEET_NOT_FOUND") {
       console.warn("[Sheets] ensureSheetExists listSheets failed", err);
     }

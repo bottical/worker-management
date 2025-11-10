@@ -144,16 +144,17 @@ export async function listSheets(sheetId) {
 
 export async function ensureSheetExists({ sheetId, dateStr }) {
   let availableSheets;
+  let listSheetsError;
   try {
     availableSheets = await listSheets(sheetId);
   } catch (err) {
-    if (err.code === "SHEET_NOT_FOUND") {
-      throw err;
+    listSheetsError = err;
+    if (err.code !== "SHEET_NOT_FOUND") {
+      console.warn("[Sheets] ensureSheetExists listSheets failed", err);
     }
-    console.warn("[Sheets] ensureSheetExists listSheets failed", err);
   }
 
-  if (Array.isArray(availableSheets) && availableSheets.length > 0) {
+  if (Array.isArray(availableSheets)) {
     const exists = availableSheets.some(
       (title) => typeof title === "string" && title.trim() === dateStr
     );
@@ -177,6 +178,11 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
   } catch (err) {
     if (err.code === "SHEET_NOT_FOUND" && Array.isArray(availableSheets)) {
       err.availableSheets = availableSheets;
+    } else if (
+      err.code === "SHEET_NOT_FOUND" &&
+      Array.isArray(listSheetsError?.availableSheets)
+    ) {
+      err.availableSheets = listSheetsError.availableSheets;
     } else if (err.code === "SHEET_NOT_FOUND") {
       try {
         const sheets = await listSheets(sheetId);
@@ -200,6 +206,8 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     err.code = "SHEET_NOT_FOUND";
     if (Array.isArray(availableSheets)) {
       err.availableSheets = availableSheets;
+    } else if (Array.isArray(listSheetsError?.availableSheets)) {
+      err.availableSheets = listSheetsError.availableSheets;
     } else {
       try {
         const sheets = await listSheets(sheetId);

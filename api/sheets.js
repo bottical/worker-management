@@ -143,25 +143,42 @@ export async function listSheets(sheetId) {
 }
 
 export async function ensureSheetExists({ sheetId, dateStr }) {
-  const sheets = await listSheets(sheetId);
-  console.debug("[Sheets] ensureSheetExists available", sheets);
-  if (!sheets.includes(dateStr)) {
-    const err = new Error("Specified sheet not found");
-    err.code = "SHEET_NOT_FOUND";
-    err.availableSheets = sheets;
+  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
+    sheetId
+  )}/gviz/tq?sheet=${encodeURIComponent(
+    dateStr
+  )}&headers=1&range=A1:A1&tqx=out:json`;
+
+  let payload;
+  try {
+    payload = await fetchGvizPayload(metaUrl, { feature: "ensureSheetExists" });
+  } catch (err) {
+    if (err.code === "SHEET_NOT_FOUND") {
+      try {
+        const sheets = await listSheets(sheetId);
+        if (Array.isArray(sheets) && sheets.length > 0) {
+          err.availableSheets = sheets;
+        }
+      } catch (listErr) {
+        console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
+      }
+    }
     throw err;
   }
 
-  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
-    sheetId
-  )}/gviz/tq?sheet=${encodeURIComponent(dateStr)}&tqx=out:json`;
-
-  const payload = await fetchGvizPayload(metaUrl, { feature: "ensureSheetExists" });
   if (payload.status !== "ok") {
     const err = new Error(
       payload.errors?.[0]?.message || "Specified sheet not found"
     );
     err.code = "SHEET_NOT_FOUND";
+    try {
+      const sheets = await listSheets(sheetId);
+      if (Array.isArray(sheets) && sheets.length > 0) {
+        err.availableSheets = sheets;
+      }
+    } catch (listErr) {
+      console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
+    }
     throw err;
   }
 }

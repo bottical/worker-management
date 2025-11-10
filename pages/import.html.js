@@ -105,6 +105,12 @@ export function renderImport(mount) {
           console.info("[Import] available sheets", err.availableSheets);
           message += `\n${hint}`;
         }
+      } else if (err?.code === "SHEET_ACCESS_DENIED") {
+        message =
+          "シートへのアクセスが拒否されました。公開設定やAPIキーの権限を確認してください。";
+      } else if (err?.code === "SHEETS_API_KEY_MISSING") {
+        message =
+          "Google Sheets APIキーが設定されていません。設定ファイルを確認してください。";
       } else {
         message = "指定されたシートの確認に失敗しました。設定をご確認ください。";
       }

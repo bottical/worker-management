@@ -1,6 +1,8 @@
 // api/sheets.js
+import { ENV } from "../config/env.js";
+
 /**
- * Googleスプレッドシート（GViz CSV）から
+ * Googleスプレッドシート（Sheets API v4）から
  * 1列目: 作業者ID
  * 2列目: 氏名
  * 3列目: 基本エリアID（任意）
@@ -25,127 +27,125 @@ function nextCol(col) {
   return toStr(toNum(col) + 1);
 }
 
-const GVIZ_RESPONSE_PATTERN = /setResponse\((.*)\);?$/s;
+const SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
-async function fetchGvizPayload(url, { feature }) {
-  console.debug(`[Sheets] ${feature} fetch`, { url });
-  const res = await fetch(url);
-  if (!res.ok) {
-    const err = new Error(`Failed to fetch ${feature}: ${res.status}`);
-    if (res.status === 404) err.code = "SHEET_NOT_FOUND";
-    err.status = res.status;
-    console.warn(`[Sheets] ${feature} response not ok`, {
-      status: res.status,
-      statusText: res.statusText
-    });
-    throw err;
-  }
-
-  const text = (await res.text()).trim();
-  console.debug(`[Sheets] ${feature} payload`, text.slice(0, 160));
-  const match = text.match(GVIZ_RESPONSE_PATTERN);
-  if (!match) {
-    const err = new Error("Specified sheet not found");
-    err.code = "SHEET_NOT_FOUND";
-    console.warn(`[Sheets] ${feature} missing setResponse marker`);
-    throw err;
-  }
-
-  try {
-    return JSON.parse(match[1]);
-  } catch (e) {
-    const err = new Error("Specified sheet not found");
-    err.code = "SHEET_NOT_FOUND";
-    console.warn(`[Sheets] ${feature} JSON parse failed`, e);
-    throw err;
-  }
+function getSheetsApiKey() {
+  return ENV?.sheetsApiKey || ENV?.firebase?.apiKey || "";
 }
 
-async function listSheetsFromWorksheetFeed(sheetId) {
-  const url = `https://spreadsheets.google.com/feeds/worksheets/${encodeURIComponent(
-    sheetId
-  )}/public/full?alt=json`;
-  console.debug("[Sheets] listSheets fallback fetch", { url });
+function buildRange(sheetTitle, startCell, endCell) {
+  const escaped = `'${String(sheetTitle).replace(/'/g, "''")}'`;
+  if (!endCell || endCell === startCell) {
+    return `${escaped}!${startCell}`;
+  }
+  return `${escaped}!${startCell}:${endCell}`;
+}
+
+function buildSheetsApiUrl(path, query = {}) {
+  const apiKey = getSheetsApiKey();
+  if (!apiKey) {
+    const err = new Error("Google Sheets API key is not configured");
+    err.code = "SHEETS_API_KEY_MISSING";
+    throw err;
+  }
+
+  const url = new URL(`${SHEETS_API_BASE}/${path}`);
+  Object.entries(query)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .forEach(([key, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((v) => url.searchParams.append(key, v));
+      } else {
+        url.searchParams.append(key, value);
+      }
+    });
+  url.searchParams.set("key", apiKey);
+  return url.toString();
+}
+
+async function fetchSheetsApi(url, { feature }) {
+  console.debug(`[Sheets] ${feature} fetch`, { url });
   const res = await fetch(url);
+  const text = await res.text();
+  let data;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.warn(`[Sheets] ${feature} JSON parse failed`, e);
+    }
+  }
+
   if (!res.ok) {
-    const err = new Error(`Failed to fetch listSheets: ${res.status}`);
-    if (res.status === 404) err.code = "SHEET_NOT_FOUND";
+    const message =
+      data?.error?.message || `Failed to fetch ${feature}: ${res.status}`;
+    const err = new Error(message);
     err.status = res.status;
-    console.warn("[Sheets] listSheets fallback response not ok", {
+    err.details = data?.error;
+    if (
+      res.status === 404 ||
+      data?.error?.status === "NOT_FOUND" ||
+      /unable to parse range/i.test(message) ||
+      /requested entity was not found/i.test(message)
+    ) {
+      err.code = "SHEET_NOT_FOUND";
+    } else if (res.status === 403 || res.status === 401) {
+      err.code = "SHEET_ACCESS_DENIED";
+    }
+    console.warn(`[Sheets] ${feature} response not ok`, {
       status: res.status,
-      statusText: res.statusText
+      statusText: res.statusText,
+      message
     });
     throw err;
   }
 
-  try {
-    const data = await res.json();
-    const entries = data?.feed?.entry || [];
-    const titles = entries
-      .map((entry) => entry?.title?.$t)
-      .filter((title) => typeof title === "string" && title.trim().length > 0)
-      .map((title) => title.trim());
-    return Array.from(new Set(titles));
-  } catch (e) {
-    console.warn("[Sheets] listSheets fallback JSON parse failed", e);
-    const err = new Error("Failed to parse worksheet feed");
-    err.code = "SHEET_NOT_FOUND";
-    throw err;
-  }
+  console.debug(`[Sheets] ${feature} payload`, text.slice(0, 200));
+  return data;
+}
+
+async function fetchValueRange({
+  sheetId,
+  sheetTitle,
+  startCell,
+  endCell,
+  feature,
+  majorDimension = "ROWS"
+}) {
+  const range = buildRange(sheetTitle, startCell, endCell);
+  const url = buildSheetsApiUrl(
+    `${encodeURIComponent(sheetId)}/values:batchGet`,
+    {
+      ranges: range,
+      majorDimension
+    }
+  );
+  const data = await fetchSheetsApi(url, { feature });
+  const valueRange = data?.valueRanges?.[0];
+  return valueRange?.values || [];
 }
 
 export async function listSheets(sheetId) {
-  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
-    sheetId
-  )}/gviz/sheetmetadata?tqx=out:json`;
-  let payload;
+  let data;
   try {
-    payload = await fetchGvizPayload(url, { feature: "listSheets" });
+    data = await fetchSheetsApi(
+      buildSheetsApiUrl(`${encodeURIComponent(sheetId)}`, {
+        fields: "sheets.properties.title"
+      }),
+      { feature: "listSheets" }
+    );
   } catch (err) {
-    if (err.code === "SHEET_NOT_FOUND") {
-      console.info("[Sheets] listSheets falling back to worksheet feed");
-      try {
-        const fallbackSheets = await listSheetsFromWorksheetFeed(sheetId);
-        return fallbackSheets;
-      } catch (fallbackErr) {
-        if (fallbackErr.code !== "SHEET_NOT_FOUND") {
-          throw fallbackErr;
-        }
-        console.info(
-          "[Sheets] worksheet feed unavailable; continuing without sheet list"
-        );
-        return undefined;
-      }
+    if (err.code === "SHEET_ACCESS_DENIED") {
+      console.info("[Sheets] listSheets not accessible", err.details || err);
+      return undefined;
     }
     throw err;
   }
 
-  if (payload.status !== "ok") {
-    console.info("[Sheets] sheetmetadata not accessible", {
-      status: payload.status,
-      errors: payload.errors
-    });
-    return undefined;
-  }
-
-  const rows = payload.table?.rows || [];
-  const cols = payload.table?.cols || [];
-  const titleIndex = cols.findIndex((col) =>
-    typeof col.label === "string" && /title|name/i.test(col.label)
-  );
-
-  const titles = [];
-  for (const row of rows) {
-    const cells = row.c || [];
-    const cell =
-      titleIndex >= 0
-        ? cells[titleIndex]
-        : cells.find((c) => typeof c?.v === "string" && c.v.trim().length > 0);
-    const value = cell?.v || cell?.f;
-    if (typeof value === "string" && value.trim().length > 0) {
-      titles.push(value.trim());
-    }
-  }
+  const titles = (data?.sheets || [])
+    .map((sheet) => sheet?.properties?.title)
+    .filter((title) => typeof title === "string" && title.trim().length > 0)
+    .map((title) => title.trim());
 
   return Array.from(new Set(titles));
 }
@@ -174,15 +174,14 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     throw err;
   }
 
-  const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
-    sheetId
-  )}/gviz/tq?sheet=${encodeURIComponent(
-    dateStr
-  )}&headers=1&range=A1:A1&tqx=out:json`;
-
-  let payload;
   try {
-    payload = await fetchGvizPayload(metaUrl, { feature: "ensureSheetExists" });
+    await fetchValueRange({
+      sheetId,
+      sheetTitle: dateStr,
+      startCell: "A1",
+      endCell: "A1",
+      feature: "ensureSheetExists"
+    });
   } catch (err) {
     if (err.code === "SHEET_NOT_FOUND" && Array.isArray(availableSheets)) {
       err.availableSheets = availableSheets;
@@ -207,27 +206,7 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     throw err;
   }
 
-  if (payload.status !== "ok") {
-    const err = new Error(
-      payload.errors?.[0]?.message || "Specified sheet not found"
-    );
-    err.code = "SHEET_NOT_FOUND";
-    if (Array.isArray(availableSheets)) {
-      err.availableSheets = availableSheets;
-    } else if (Array.isArray(listSheetsError?.availableSheets)) {
-      err.availableSheets = listSheetsError.availableSheets;
-    } else {
-      try {
-        const sheets = await listSheets(sheetId);
-        if (Array.isArray(sheets) && sheets.length > 0) {
-          err.availableSheets = sheets;
-        }
-      } catch (listErr) {
-        console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
-      }
-    }
-    throw err;
-  }
+  // Sheets APIから200が返ればシートは存在すると判断
 }
 
 export async function readWorkerRows(
@@ -240,66 +219,42 @@ export async function readWorkerRows(
   }
 
   const startRow = hasHeader ? 2 : 1;
-  const nameCol = nextCol(idCol.toUpperCase());
+  const idColumn = (idCol || "A").toUpperCase();
+  const nameCol = nextCol(idColumn);
   const areaCol = nextCol(nameCol);
-  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
-    sheetId
-  )}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
-    dateStr
-  )}&range=${idCol}${startRow}:${areaCol}9999`;
 
-  console.debug("[Sheets] readWorkerRows fetch", {
-    url,
+  let values;
+  try {
+    values = await fetchValueRange({
+      sheetId,
+      sheetTitle: dateStr,
+      startCell: `${idColumn}${startRow}`,
+      endCell: `${areaCol}9999`,
+      feature: "readWorkerRows"
+    });
+  } catch (err) {
+    if (err.code === "SHEET_NOT_FOUND") {
+      throw err;
+    }
+    console.warn("[Sheets] readWorkerRows unexpected failure", err);
+    throw err;
+  }
+
+  console.debug("[Sheets] readWorkerRows received", {
+    rows: values.length,
     startRow,
-    idCol,
+    idColumn,
     nameCol,
     areaCol
   });
-  const res = await fetch(url);
-  if (!res.ok) {
-    const err = new Error(`Failed to fetch sheet: ${res.status}`);
-    if (res.status === 404) err.code = "SHEET_NOT_FOUND";
-    console.warn("[Sheets] readWorkerRows response not ok", {
-      status: res.status,
-      statusText: res.statusText
-    });
-    throw err;
-  }
-  const contentType = res.headers.get("content-type") || "";
-  const csv = await res.text();
-  console.debug("[Sheets] readWorkerRows contentType", contentType);
-  console.debug("[Sheets] readWorkerRows sample", csv.slice(0, 120));
-
-  const trimmed = csv.trim();
-  if (
-    /^<!doctype html/i.test(trimmed) ||
-    /^<html/i.test(trimmed) ||
-    /cannot find range/i.test(csv) ||
-    /sheet.*not found/i.test(csv) ||
-    /does not exist/i.test(csv) ||
-    /unable to parse/i.test(csv) ||
-    /invalid (sheet|worksheet)/i.test(csv) ||
-    /^error\s*\:/i.test(trimmed) ||
-    /text\/html/i.test(contentType)
-  ) {
-    const err = new Error("Specified sheet not found");
-    err.code = "SHEET_NOT_FOUND";
-    console.warn("[Sheets] readWorkerRows detected error payload");
-    throw err;
-  }
-
-  const lines = csv
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 
   const rowsOut = [];
-  for (const line of lines) {
-    // 超簡易CSV: ダブルクオート除去→カンマ区切り
-    const cols = line.split(",").map((v) => v.replace(/^"|"$/g, "").trim());
-    const workerId = (cols[0] || "").trim();
-    const name = (cols[1] || "").trim();
-    const areaId = (cols[2] || "").trim();
+  for (const row of values) {
+    if (!Array.isArray(row)) continue;
+    const [workerIdRaw = "", nameRaw = "", areaRaw = ""] = row;
+    const workerId = String(workerIdRaw || "").trim();
+    const name = String(nameRaw || "").trim();
+    const areaId = String(areaRaw || "").trim();
     if (!workerId) continue;
     rowsOut.push({ workerId, name, areaId });
   }
@@ -318,7 +273,8 @@ export async function readWorkerRows(
   }
 
   console.debug("[Sheets] readWorkerRows parsed", {
-    totalLines: lines.length,
+    fetchedRows: values.length,
+    outputRows: rowsOut.length,
     uniqueCount: unique.length,
     duplicates: dup.size
   });

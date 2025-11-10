@@ -19,6 +19,7 @@ export function renderImport(mount) {
     <h2>スプレッドシート取り込み</h2>
     <div class="form grid twocol">
       <label>シートID<input id="sheetId" placeholder="1abc..."/></label>
+      <label>Google Sheets APIキー<input id="sheetsKey" type="password" placeholder="AIza..." autocomplete="off"/></label>
       <label>シート名（日付）<input id="dateStr" placeholder="2025-11-04"/></label>
       <label>ID列（A等）<input id="idCol" placeholder="A"/></label>
       <label>ヘッダー行
@@ -28,6 +29,10 @@ export function renderImport(mount) {
         </select>
       </label>
     </div>
+    <p class="hint" style="margin-top:12px">
+      Google Cloud Consoleで取得したSheets APIキーを入力してください。ローカルのブラウザにのみ保存されます。
+      既定値をコードで共有したい場合は <code>config/env.js</code> の <code>sheetsApiKey</code> を編集してください。
+    </p>
     <div class="form-actions" style="align-items:center;gap:12px">
       <button id="run" class="button">取り込む</button>
       <div id="progress" class="loading-indicator" aria-live="polite">
@@ -41,6 +46,7 @@ export function renderImport(mount) {
 
   // 既定値をストアから復元
   box.querySelector("#sheetId").value = state.sheetId || "";
+  box.querySelector("#sheetsKey").value = state.sheetsApiKey || "";
   box.querySelector("#dateStr").value = state.dateTab || "";
   box.querySelector("#idCol").value = state.idColumn || "A";
   box.querySelector("#hasHeader").value = state.hasHeader ? "1" : "0";
@@ -48,6 +54,15 @@ export function renderImport(mount) {
   const runBtn = box.querySelector("#run");
   const progress = box.querySelector("#progress");
   const result = box.querySelector("#result");
+  const sheetsKeyInput = box.querySelector("#sheetsKey");
+
+  const persistSheetsKey = () => {
+    const value = (sheetsKeyInput.value || "").trim();
+    set({ sheetsApiKey: value });
+  };
+
+  sheetsKeyInput.addEventListener("change", persistSheetsKey);
+  sheetsKeyInput.addEventListener("blur", persistSheetsKey);
 
   const setLoading = (loading) => {
     runBtn.disabled = loading;
@@ -71,6 +86,7 @@ export function renderImport(mount) {
     const dateStr = box.querySelector("#dateStr").value.trim();
     const col = (box.querySelector("#idCol").value || "A").trim().toUpperCase();
     const hasHeader = box.querySelector("#hasHeader").value === "1";
+    persistSheetsKey();
 
     console.info("[Import] parameters", {
       sheetId: sheetId.slice(0, 6) + (sheetId.length > 6 ? "…" : ""),
@@ -105,6 +121,12 @@ export function renderImport(mount) {
           console.info("[Import] available sheets", err.availableSheets);
           message += `\n${hint}`;
         }
+      } else if (err?.code === "SHEET_ACCESS_DENIED") {
+        message =
+          "シートへのアクセスが拒否されました。公開設定やAPIキーの権限を確認してください。";
+      } else if (err?.code === "SHEETS_API_KEY_MISSING") {
+        message =
+          "Google Sheets APIキーが設定されていません。画面の入力欄または設定ファイルを確認してください。";
       } else {
         message = "指定されたシートの確認に失敗しました。設定をご確認ください。";
       }

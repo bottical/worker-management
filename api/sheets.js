@@ -104,20 +104,28 @@ export async function listSheets(sheetId) {
   } catch (err) {
     if (err.code === "SHEET_NOT_FOUND") {
       console.info("[Sheets] listSheets falling back to worksheet feed");
-      const fallbackSheets = await listSheetsFromWorksheetFeed(sheetId);
-      if (fallbackSheets.length > 0) {
+      try {
+        const fallbackSheets = await listSheetsFromWorksheetFeed(sheetId);
         return fallbackSheets;
+      } catch (fallbackErr) {
+        if (fallbackErr.code !== "SHEET_NOT_FOUND") {
+          throw fallbackErr;
+        }
+        console.info(
+          "[Sheets] worksheet feed unavailable; continuing without sheet list"
+        );
+        return undefined;
       }
     }
     throw err;
   }
 
   if (payload.status !== "ok") {
-    const err = new Error(
-      payload.errors?.[0]?.message || "Failed to read sheet metadata"
-    );
-    err.code = "SHEET_NOT_FOUND";
-    throw err;
+    console.info("[Sheets] sheetmetadata not accessible", {
+      status: payload.status,
+      errors: payload.errors
+    });
+    return undefined;
   }
 
   const rows = payload.table?.rows || [];
@@ -149,9 +157,6 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     availableSheets = await listSheets(sheetId);
   } catch (err) {
     listSheetsError = err;
-    if (err.code === "SHEET_NOT_FOUND") {
-      throw err;
-    }
     if (err.code !== "SHEET_NOT_FOUND") {
       console.warn("[Sheets] ensureSheetExists listSheets failed", err);
     }

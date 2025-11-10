@@ -153,13 +153,12 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     console.warn("[Sheets] ensureSheetExists listSheets failed", err);
   }
 
-  if (
-    Array.isArray(availableSheets) &&
-    availableSheets.length > 0 &&
-    !availableSheets.some(
+  if (Array.isArray(availableSheets) && availableSheets.length > 0) {
+    const exists = availableSheets.some(
       (title) => typeof title === "string" && title.trim() === dateStr
-    )
-  ) {
+    );
+    if (exists) return;
+    // 一覧は取れたが目的タブがない → この時だけエラー
     const err = new Error("Specified sheet not found");
     err.code = "SHEET_NOT_FOUND";
     err.availableSheets = availableSheets;

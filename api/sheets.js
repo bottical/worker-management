@@ -143,6 +143,29 @@ export async function listSheets(sheetId) {
 }
 
 export async function ensureSheetExists({ sheetId, dateStr }) {
+  let availableSheets;
+  try {
+    availableSheets = await listSheets(sheetId);
+  } catch (err) {
+    if (err.code === "SHEET_NOT_FOUND") {
+      throw err;
+    }
+    console.warn("[Sheets] ensureSheetExists listSheets failed", err);
+  }
+
+  if (
+    Array.isArray(availableSheets) &&
+    availableSheets.length > 0 &&
+    !availableSheets.some(
+      (title) => typeof title === "string" && title.trim() === dateStr
+    )
+  ) {
+    const err = new Error("Specified sheet not found");
+    err.code = "SHEET_NOT_FOUND";
+    err.availableSheets = availableSheets;
+    throw err;
+  }
+
   const metaUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(
     sheetId
   )}/gviz/tq?sheet=${encodeURIComponent(
@@ -153,14 +176,19 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
   try {
     payload = await fetchGvizPayload(metaUrl, { feature: "ensureSheetExists" });
   } catch (err) {
-    if (err.code === "SHEET_NOT_FOUND") {
+    if (err.code === "SHEET_NOT_FOUND" && Array.isArray(availableSheets)) {
+      err.availableSheets = availableSheets;
+    } else if (err.code === "SHEET_NOT_FOUND") {
       try {
         const sheets = await listSheets(sheetId);
         if (Array.isArray(sheets) && sheets.length > 0) {
           err.availableSheets = sheets;
         }
       } catch (listErr) {
-        console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
+        console.warn(
+          "[Sheets] ensureSheetExists failed to list sheets after fetch",
+          listErr
+        );
       }
     }
     throw err;
@@ -171,13 +199,17 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
       payload.errors?.[0]?.message || "Specified sheet not found"
     );
     err.code = "SHEET_NOT_FOUND";
-    try {
-      const sheets = await listSheets(sheetId);
-      if (Array.isArray(sheets) && sheets.length > 0) {
-        err.availableSheets = sheets;
+    if (Array.isArray(availableSheets)) {
+      err.availableSheets = availableSheets;
+    } else {
+      try {
+        const sheets = await listSheets(sheetId);
+        if (Array.isArray(sheets) && sheets.length > 0) {
+          err.availableSheets = sheets;
+        }
+      } catch (listErr) {
+        console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
       }
-    } catch (listErr) {
-      console.warn("[Sheets] ensureSheetExists failed to list sheets", listErr);
     }
     throw err;
   }

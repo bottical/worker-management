@@ -1,5 +1,6 @@
 // api/sheets.js
 import { ENV } from "../config/env.js";
+import { state } from "../core/store.js";
 
 /**
  * Googleスプレッドシート（Sheets API v4）から
@@ -30,6 +31,10 @@ function nextCol(col) {
 const SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 
 function getSheetsApiKey() {
+  const configuredKey = (state?.sheetsApiKey || "").trim();
+  if (configuredKey) {
+    return configuredKey;
+  }
   return ENV?.sheetsApiKey || ENV?.firebase?.apiKey || "";
 }
 

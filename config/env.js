@@ -12,7 +12,5 @@ export const ENV = {
   // スプレッドシート既定（UIで上書き可）
   sheetId: "1rT3ztyYNlKVPfpNDd_jfCGSF6qNG3VoCcNuhLM1Tld4",              // 例: "1A2b3C..."
   idColumn: "A",
-  hasHeader: false,
-  // Sheets API v4 呼び出し用 APIキー（空欄にすると画面での入力を要求）
-  sheetsApiKey: "AIzaSyDhNmjRF_KO5u_L0lYflzxAm1-8BDVF5lo"
+  hasHeader: false
 };

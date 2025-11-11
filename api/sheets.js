@@ -26,6 +26,19 @@ function nextCol(col) {
   return toStr(toNum(col) + 1);
 }
 
+function parseCellReference(cell) {
+  const match = String(cell || "")
+    .trim()
+    .toUpperCase()
+    .match(/^([A-Z]+)(\d+)$/);
+  if (!match) {
+    const err = new Error(`Invalid cell reference: ${cell}`);
+    err.code = "INVALID_CELL_REFERENCE";
+    throw err;
+  }
+  return { column: match[1], row: parseInt(match[2], 10) };
+}
+
 const GVIZ_BASE = "https://docs.google.com/spreadsheets/d";
 
 function buildRange(startCell, endCell) {
@@ -150,21 +163,24 @@ async function fetchCellRange({
   return values;
 }
 
-export async function ensureSheetExists({ sheetId, dateStr }) {
+export async function ensureSheetExists({ sheetId, dateStr, referenceCell = "A1" }) {
   try {
+    const { column, row } = parseCellReference(referenceCell);
+    const targetCell = `${column}${row}`;
     const values = await fetchCellRange({
       sheetId,
       sheetTitle: dateStr,
-      startCell: "A1",
-      endCell: "A1",
+      startCell: targetCell,
+      endCell: targetCell,
       feature: "ensureSheetExists"
     });
-    const sheetName = String(values?.[0]?.[0] ?? "").trim();
-    if (!sheetName || sheetName !== dateStr) {
+    const cellValue = String(values?.[0]?.[0] ?? "").trim();
+    if (!cellValue || cellValue !== dateStr) {
       const err = new Error("Sheet name cell does not match requested sheet");
       err.code = "SHEET_NAME_MISMATCH";
       err.expected = dateStr;
-      err.actual = sheetName;
+      err.actual = cellValue;
+      err.referenceCell = targetCell;
       throw err;
     }
   } catch (err) {
@@ -175,15 +191,16 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
 }
 
 export async function readWorkerRows(
-  { sheetId, dateStr, idCol, hasHeader },
+  { sheetId, dateStr, idCol, referenceCell },
   options = {}
 ) {
   if (!options.skipEnsure) {
     console.debug("[Sheets] readWorkerRows running ensureSheetExists");
-    await ensureSheetExists({ sheetId, dateStr });
+    await ensureSheetExists({ sheetId, dateStr, referenceCell });
   }
 
-  const startRow = hasHeader ? 3 : 2;
+  const { row: baseRow } = parseCellReference(referenceCell || "A1");
+  const startRow = baseRow + 1;
   const idColumn = (idCol || "A").toUpperCase();
   const nameCol = nextCol(idColumn);
   const areaCol = nextCol(nameCol);

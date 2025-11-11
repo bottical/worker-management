@@ -12,5 +12,5 @@ export const ENV = {
   // スプレッドシート既定（UIで上書き可）
   sheetId: "1rT3ztyYNlKVPfpNDd_jfCGSF6qNG3VoCcNuhLM1Tld4",              // 例: "1A2b3C..."
   idColumn: "A",
-  hasHeader: false
+  referenceCell: "A1"
 };

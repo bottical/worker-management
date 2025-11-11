@@ -1,9 +1,7 @@
 // api/sheets.js
-import { ENV } from "../config/env.js";
-import { state } from "../core/store.js";
 
 /**
- * Googleスプレッドシート（Sheets API v4）から
+ * Googleスプレッドシートから
  * 1列目: 作業者ID
  * 2列目: 氏名
  * 3列目: 基本エリアID（任意）
@@ -28,111 +26,133 @@ function nextCol(col) {
   return toStr(toNum(col) + 1);
 }
 
-const SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
+const GVIZ_BASE = "https://docs.google.com/spreadsheets/d";
 
-function getSheetsApiKey() {
-  const configuredKey = (state?.sheetsApiKey || "").trim();
-  if (configuredKey) {
-    return configuredKey;
+function buildRange(startCell, endCell) {
+  const start = String(startCell || "");
+  const end = String(endCell || "");
+  if (!end || end === start) {
+    return start;
   }
-  return ENV?.sheetsApiKey || ENV?.firebase?.apiKey || "";
+  return `${start}:${end}`;
 }
 
-function buildRange(sheetTitle, startCell, endCell) {
-  const escaped = `'${String(sheetTitle).replace(/'/g, "''")}'`;
-  if (!endCell || endCell === startCell) {
-    return `${escaped}!${startCell}`;
+function detectErrorCode(message) {
+  if (!message) return undefined;
+  if (/not\s+found/i.test(message) || /unable to find/i.test(message)) {
+    return "SHEET_NOT_FOUND";
   }
-  return `${escaped}!${startCell}:${endCell}`;
+  if (/permission/i.test(message) || /access\s+denied/i.test(message)) {
+    return "SHEET_ACCESS_DENIED";
+  }
+  return undefined;
 }
 
-function buildSheetsApiUrl(path, query = {}) {
-  const apiKey = getSheetsApiKey();
-  if (!apiKey) {
-    const err = new Error("Google Sheets API key is not configured");
-    err.code = "SHEETS_API_KEY_MISSING";
-    throw err;
-  }
-
-  const url = new URL(`${SHEETS_API_BASE}/${path}`);
-  Object.entries(query)
-    .filter(([, value]) => value !== undefined && value !== null && value !== "")
-    .forEach(([key, value]) => {
-      if (Array.isArray(value)) {
-        value.forEach((v) => url.searchParams.append(key, v));
-      } else {
-        url.searchParams.append(key, value);
-      }
-    });
-  url.searchParams.set("key", apiKey);
-  return url.toString();
-}
-
-async function fetchSheetsApi(url, { feature }) {
-  console.debug(`[Sheets] ${feature} fetch`, { url });
-  const res = await fetch(url);
-  const text = await res.text();
-  let data;
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.warn(`[Sheets] ${feature} JSON parse failed`, e);
-    }
-  }
-
-  if (!res.ok) {
-    const message =
-      data?.error?.message || `Failed to fetch ${feature}: ${res.status}`;
-    const err = new Error(message);
-    err.status = res.status;
-    err.details = data?.error;
-    if (
-      res.status === 404 ||
-      data?.error?.status === "NOT_FOUND" ||
-      /unable to parse range/i.test(message) ||
-      /requested entity was not found/i.test(message)
-    ) {
-      err.code = "SHEET_NOT_FOUND";
-    } else if (res.status === 403 || res.status === 401) {
-      err.code = "SHEET_ACCESS_DENIED";
-    }
-    console.warn(`[Sheets] ${feature} response not ok`, {
-      status: res.status,
-      statusText: res.statusText,
-      message
-    });
-    throw err;
-  }
-
-  console.debug(`[Sheets] ${feature} payload`, text.slice(0, 200));
-  return data;
-}
-
-async function fetchValueRange({
+async function fetchCellRange({
   sheetId,
   sheetTitle,
   startCell,
   endCell,
-  feature,
-  majorDimension = "ROWS"
+  feature
 }) {
-  const range = buildRange(sheetTitle, startCell, endCell);
-  const url = buildSheetsApiUrl(
-    `${encodeURIComponent(sheetId)}/values:batchGet`,
-    {
-      ranges: range,
-      majorDimension
+  const range = buildRange(startCell, endCell);
+  const sheetName = String(sheetTitle || "").trim();
+  const params = new URLSearchParams({ tqx: "out:json" });
+  if (!sheetName) {
+    const err = new Error("Sheet title is required");
+    err.code = "SHEET_NOT_FOUND";
+    throw err;
+  }
+  if (!range.trim()) {
+    const err = new Error("Range is required");
+    throw err;
+  }
+  params.set("sheet", sheetName);
+  params.set("range", range.trim());
+  const url = `${GVIZ_BASE}/${encodeURIComponent(sheetId)}/gviz/tq?${params.toString()}`;
+
+  console.debug(`[Sheets] ${feature} fetch`, { url });
+  const res = await fetch(url, {
+    headers: { Accept: "text/plain" }
+  });
+  const text = await res.text();
+
+  if (!res.ok) {
+    const err = new Error(`Failed to fetch ${feature}: ${res.status}`);
+    err.status = res.status;
+    if (res.status === 404) {
+      err.code = "SHEET_NOT_FOUND";
+    } else if (res.status === 401 || res.status === 403) {
+      err.code = "SHEET_ACCESS_DENIED";
     }
-  );
-  const data = await fetchSheetsApi(url, { feature });
-  const valueRange = data?.valueRanges?.[0];
-  return valueRange?.values || [];
+    console.warn(`[Sheets] ${feature} response not ok`, {
+      status: res.status,
+      statusText: res.statusText
+    });
+    throw err;
+  }
+
+  const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]+?)\);?/);
+  if (!match) {
+    const err = new Error("Unexpected response format from Google Sheets");
+    err.code = detectErrorCode(text);
+    console.warn(`[Sheets] ${feature} unexpected payload`, text.slice(0, 200));
+    throw err;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(match[1]);
+  } catch (err) {
+    err.code = detectErrorCode(text);
+    console.warn(`[Sheets] ${feature} JSON parse failed`, err);
+    throw err;
+  }
+
+  if (data?.status !== "ok") {
+    const message =
+      data?.errors?.[0]?.detailed_message ||
+      data?.errors?.[0]?.message ||
+      data?.warnings?.[0]?.message ||
+      "Failed to load sheet";
+    const err = new Error(message);
+    err.code = detectErrorCode(message);
+    err.status = data?.status;
+    console.warn(`[Sheets] ${feature} query status not ok`, data);
+    throw err;
+  }
+
+  const rows = data?.table?.rows || [];
+  const columnCount = data?.table?.cols?.length || 0;
+  const values = rows.map((row) => {
+    const cells = row?.c || [];
+    const out = [];
+    for (let i = 0; i < columnCount; i++) {
+      const cell = cells[i];
+      let value = "";
+      if (cell) {
+        if (cell.f !== undefined && cell.f !== null) {
+          value = cell.f;
+        } else if (cell.v !== undefined && cell.v !== null) {
+          value = cell.v;
+        }
+      }
+      out.push(value);
+    }
+    return out;
+  });
+
+  console.debug(`[Sheets] ${feature} payload`, values.length, {
+    rows: values.length,
+    columns: columnCount
+  });
+
+  return values;
 }
 
 export async function ensureSheetExists({ sheetId, dateStr }) {
   try {
-    const values = await fetchValueRange({
+    const values = await fetchCellRange({
       sheetId,
       sheetTitle: dateStr,
       startCell: "A1",
@@ -151,7 +171,7 @@ export async function ensureSheetExists({ sheetId, dateStr }) {
     throw err;
   }
 
-  // Sheets APIから200が返ればシートは存在すると判断
+  // gvizエンドポイントから200が返ればシートは存在すると判断
 }
 
 export async function readWorkerRows(
@@ -170,7 +190,7 @@ export async function readWorkerRows(
 
   let values;
   try {
-    values = await fetchValueRange({
+    values = await fetchCellRange({
       sheetId,
       sheetTitle: dateStr,
       startCell: `${idColumn}${startRow}`,

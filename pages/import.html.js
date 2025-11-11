@@ -130,6 +130,16 @@ export function renderImport(mount) {
         duplicates
       });
 
+      if (duplicates.length) {
+        const message = `取り込み対象に重複したIDがあります：${duplicates.join(", ")}`;
+        console.warn("[Import] duplicate worker IDs detected", duplicates);
+        toast(message, "error");
+        result.textContent = message;
+        setLoading(false);
+        console.groupEnd();
+        return;
+      }
+
       if (!rows.length) {
         console.warn("[Import] no workers found");
         toast("シートに作業者が見つかりませんでした", "error");
@@ -154,11 +164,10 @@ export function renderImport(mount) {
         newOrUpdated++;
       }
 
-      // 自動IN：基本エリアが入っている人のみ（同一サイト・フロアで在籍中判定）
+      // 自動IN：基本エリアが入っている人のみ（同一サイト内で在籍中判定）
       const activeNow = await getActiveAssignments({
         userId: state.site.userId,
-        siteId: state.site.siteId,
-        floorId: state.site.floorId
+        siteId: state.site.siteId
       });
       const assignedSet = new Set(activeNow.map((a) => a.workerId));
       const toAssign = rows.filter(
@@ -221,8 +230,7 @@ export function renderImport(mount) {
       });
 
       const autoInCount = toAssign.length;
-      const dupNote = duplicates.length ? `／重複ID:${duplicates.join(",")}` : "";
-      result.textContent = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）${dupNote}`;
+      result.textContent = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`;
       toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
     } catch (err) {
       console.error("[Import] unexpected failure", err);

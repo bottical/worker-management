@@ -21,12 +21,7 @@ export function renderImport(mount) {
       <label>シートID<input id="sheetId" placeholder="1abc..."/></label>
       <label>シート名（日付）<input id="dateStr" placeholder="2025-11-04"/></label>
       <label>ID列（A等）<input id="idCol" placeholder="A"/></label>
-      <label>ヘッダー行
-        <select id="hasHeader">
-          <option value="1" selected>あり</option>
-          <option value="0">なし</option>
-        </select>
-      </label>
+      <label>基準セル<input id="referenceCell" placeholder="A1"/></label>
     </div>
     <div class="form-actions" style="align-items:center;gap:12px">
       <button id="run" class="button">取り込む</button>
@@ -43,7 +38,7 @@ export function renderImport(mount) {
   box.querySelector("#sheetId").value = state.sheetId || "";
   box.querySelector("#dateStr").value = state.dateTab || "";
   box.querySelector("#idCol").value = state.idColumn || "A";
-  box.querySelector("#hasHeader").value = state.hasHeader ? "1" : "0";
+  box.querySelector("#referenceCell").value = state.referenceCell || "A1";
 
   const runBtn = box.querySelector("#run");
   const progress = box.querySelector("#progress");
@@ -70,18 +65,20 @@ export function renderImport(mount) {
     const sheetId = box.querySelector("#sheetId").value.trim();
     const dateStr = box.querySelector("#dateStr").value.trim();
     const col = (box.querySelector("#idCol").value || "A").trim().toUpperCase();
-    const hasHeader = box.querySelector("#hasHeader").value === "1";
+    const referenceCell = (box.querySelector("#referenceCell").value || "A1")
+      .trim()
+      .toUpperCase();
 
     console.info("[Import] parameters", {
       sheetId: sheetId.slice(0, 6) + (sheetId.length > 6 ? "…" : ""),
       dateStr,
       col,
-      hasHeader
+      referenceCell
     });
 
-    if (!sheetId || !dateStr) {
-      console.warn("[Import] missing required fields", { sheetId, dateStr });
-      toast("シートIDとシート名（日付）を入力してください");
+    if (!sheetId || !dateStr || !referenceCell) {
+      console.warn("[Import] missing required fields", { sheetId, dateStr, referenceCell });
+      toast("シートIDとシート名（日付）、基準セルを入力してください");
       console.groupEnd();
       return;
     }
@@ -90,7 +87,7 @@ export function renderImport(mount) {
 
     try {
       console.info("[Import] ensuring sheet exists");
-      await ensureSheetExists({ sheetId, dateStr });
+      await ensureSheetExists({ sheetId, dateStr, referenceCell });
       console.info("[Import] sheet verified");
     } catch (err) {
       console.error("[Import] ensureSheetExists failed", err);
@@ -99,7 +96,8 @@ export function renderImport(mount) {
         message = `シート「${dateStr}」が見つかりません。日付を確認してください。`;
       } else if (err?.code === "SHEET_NAME_MISMATCH") {
         const actual = err?.actual ? `（シート内の値: ${err.actual}）` : "";
-        message = `シート名（日付）の指定とシート内A1セルの値が一致しません${actual}。`;
+        const refCell = err?.referenceCell || referenceCell;
+        message = `シート名（日付）の指定とシート内${refCell}セルの値が一致しません${actual}。`;
       } else if (err?.code === "SHEET_ACCESS_DENIED") {
         message =
           "シートへのアクセスが拒否されました。共有設定や閲覧権限を確認してください。";
@@ -121,7 +119,7 @@ export function renderImport(mount) {
           sheetId,
           dateStr,
           idCol: col,
-          hasHeader
+          referenceCell
         },
         { skipEnsure: true }
       );
@@ -218,7 +216,7 @@ export function renderImport(mount) {
         sheetId,
         dateTab: dateStr,
         idColumn: col,
-        hasHeader,
+        referenceCell,
         workers: rows
       });
 
@@ -229,7 +227,9 @@ export function renderImport(mount) {
     } catch (err) {
       console.error("[Import] unexpected failure", err);
       const message =
-        err?.code === "SHEET_NOT_FOUND"
+        err?.code === "INVALID_CELL_REFERENCE"
+          ? "基準セルの指定が正しくありません。A1のような形式で入力してください。"
+          : err?.code === "SHEET_NOT_FOUND"
           ? `シート「${dateStr}」が見つかりません。日付を確認してください。`
           : err?.code === "SHEET_ACCESS_DENIED"
             ? "シートへのアクセスが拒否されました。共有設定や閲覧権限を確認してください。"

@@ -6,7 +6,7 @@ export const state = {
   sheetId: ENV.sheetId,
   dateTab: new Date().toISOString().slice(0, 10),
   idColumn: ENV.idColumn,
-  hasHeader: ENV.hasHeader,
+  referenceCell: ENV.referenceCell || "A1",
   workers: [], // ["ID001", ...]
   placed: new Map(), // workerId -> { zone: "A"|"B", assignmentId }
   user: null, // { uid, email, displayName }

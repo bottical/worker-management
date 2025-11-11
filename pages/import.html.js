@@ -5,12 +5,185 @@ import {
   upsertWorker,
   createAssignment,
   getActiveAssignments,
-  saveDailyRoster
+  saveDailyRoster,
+  getFloorsOnce,
+  getAreasOnce
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "18:00";
+
+const AREA_FLOOR_SEPARATORS = [":", "：", "/", "／", ">", "@", "|"];
+
+function parseFloorPrefixedArea(rawValue, knownFloors) {
+  const value = String(rawValue || "").trim();
+  if (!value || !knownFloors?.size) {
+    return null;
+  }
+  for (const sep of AREA_FLOOR_SEPARATORS) {
+    const idx = value.indexOf(sep);
+    if (idx > 0 && idx < value.length - 1) {
+      const floorCandidate = value.slice(0, idx).trim();
+      const areaCandidate = value.slice(idx + 1).trim();
+      if (areaCandidate && knownFloors.has(floorCandidate)) {
+        return { floorId: floorCandidate, areaId: areaCandidate };
+      }
+    }
+  }
+  const hyphenMatch = value.match(/^(\S+)\s*-\s*(\S.*)$/);
+  if (hyphenMatch) {
+    const [, floorCandidate, areaCandidate] = hyphenMatch;
+    if (areaCandidate && knownFloors.has(floorCandidate)) {
+      return { floorId: floorCandidate, areaId: areaCandidate.trim() };
+    }
+  }
+  const spaceMatch = value.match(/^(\S+)\s+(\S.*)$/);
+  if (spaceMatch) {
+    const [, floorCandidate, areaCandidate] = spaceMatch;
+    if (areaCandidate && knownFloors.has(floorCandidate)) {
+      return { floorId: floorCandidate, areaId: areaCandidate.trim() };
+    }
+  }
+  return null;
+}
+
+async function resolveRowsWithFloors(rows, { userId, siteId, defaultFloorId }) {
+  const normalizedRows = Array.isArray(rows) ? rows.map((r) => ({ ...r })) : [];
+  if (!userId || !siteId || !normalizedRows.length) {
+    return {
+      rows: normalizedRows.map((r) => ({ ...r, floorId: r.floorId || "" })),
+      ambiguous: [],
+      unresolved: [],
+      knownFloors: [],
+      missingIndexes: []
+    };
+  }
+
+  const areaToFloors = new Map();
+  const floorSet = new Set();
+  try {
+    const floors = await getFloorsOnce({ userId, siteId });
+    floors
+      .map((f) => f?.id)
+      .filter(Boolean)
+      .forEach((id) => floorSet.add(id));
+
+    await Promise.all(
+      Array.from(floorSet).map(async (floorId) => {
+        const areas = await getAreasOnce({ userId, siteId, floorId });
+        areas
+          .map((a) => a?.id)
+          .filter(Boolean)
+          .forEach((areaId) => {
+            const existing = areaToFloors.get(areaId) || new Set();
+            existing.add(floorId);
+            areaToFloors.set(areaId, existing);
+          });
+      })
+    );
+  } catch (err) {
+    console.warn("[Import] failed to load floor metadata", err);
+  }
+
+  if (defaultFloorId) {
+    floorSet.add(defaultFloorId);
+  }
+
+  const singleFloorId = floorSet.size === 1 ? floorSet.values().next().value : "";
+
+  const ambiguousAreas = new Set();
+  const unresolvedAreas = new Set();
+  const missingIndexes = new Set();
+
+  const resolved = normalizedRows.map((row, idx) => {
+    const areaRaw = String(row.areaId || "").trim();
+    if (!areaRaw) {
+      const floorId = singleFloorId || "";
+      const hasResolvedFloor = Boolean(floorId || !floorSet.size);
+      if (!hasResolvedFloor) {
+        missingIndexes.add(idx);
+      }
+      return { ...row, areaId: "", floorId };
+    }
+
+    let areaId = areaRaw;
+    let floorId = "";
+    let hasResolvedFloor = false;
+
+    const floorsForExact = areaToFloors.get(areaRaw);
+    if (floorsForExact) {
+      if (floorsForExact.size === 1) {
+        floorId = floorsForExact.values().next().value;
+        hasResolvedFloor = true;
+      } else if (floorsForExact.size > 1) {
+        ambiguousAreas.add(areaRaw);
+      }
+    }
+
+    if (!floorId) {
+      const parsed = parseFloorPrefixedArea(areaRaw, floorSet);
+      if (parsed) {
+        areaId = parsed.areaId || areaId;
+        floorId = parsed.floorId || floorId;
+        if (parsed.floorId) {
+          hasResolvedFloor = true;
+        }
+      }
+    }
+
+    if (areaId !== areaRaw) {
+      const floorsForParsed = areaToFloors.get(areaId);
+      if (floorsForParsed) {
+        if (floorsForParsed.size === 1) {
+          floorId = floorsForParsed.values().next().value;
+          hasResolvedFloor = true;
+        } else if (floorId && floorsForParsed.has(floorId)) {
+          // ok
+        } else if (floorsForParsed.size > 1) {
+          ambiguousAreas.add(areaId);
+          floorId = "";
+          hasResolvedFloor = false;
+        }
+      }
+    } else if (floorId) {
+      const floorsForArea = areaToFloors.get(areaId);
+      if (floorsForArea && !floorsForArea.has(floorId)) {
+        if (floorsForArea.size === 1) {
+          floorId = floorsForArea.values().next().value;
+          hasResolvedFloor = true;
+        } else if (floorsForArea.size > 1) {
+          ambiguousAreas.add(areaId);
+          floorId = "";
+          hasResolvedFloor = false;
+        }
+      }
+    }
+
+    if (!hasResolvedFloor && singleFloorId) {
+      floorId = singleFloorId;
+      hasResolvedFloor = true;
+    }
+
+    if (!hasResolvedFloor && areaId && !ambiguousAreas.has(areaId)) {
+      unresolvedAreas.add(areaId);
+    }
+
+    if (!hasResolvedFloor && areaId) {
+      missingIndexes.add(idx);
+    }
+
+    return { ...row, areaId, floorId: floorId || "" };
+  });
+
+  return {
+    rows: resolved,
+    ambiguous: Array.from(ambiguousAreas),
+    unresolved: Array.from(unresolvedAreas),
+    knownFloors: Array.from(floorSet),
+    missingIndexes: Array.from(missingIndexes)
+  };
+}
 
 export function renderImport(mount) {
   const box = document.createElement("div");
@@ -114,7 +287,7 @@ export function renderImport(mount) {
 
     try {
       console.info("[Import] reading worker rows");
-      const { ids, rows, duplicates } = await readWorkerRows(
+      const { ids, rows: rawRows, duplicates } = await readWorkerRows(
         {
           sheetId,
           dateStr,
@@ -126,17 +299,53 @@ export function renderImport(mount) {
 
       console.info("[Import] rows fetched", {
         idCount: ids.length,
-        rowCount: rows.length,
+        rowCount: rawRows.length,
         duplicates
       });
 
-      if (!rows.length) {
+      if (duplicates.length) {
+        const message = `取り込み対象に重複したIDがあります：${duplicates.join(", ")}`;
+        console.warn("[Import] duplicate worker IDs detected", duplicates);
+        toast(message, "error");
+        result.textContent = message;
+        setLoading(false);
+        console.groupEnd();
+        return;
+      }
+
+      if (!rawRows.length) {
         console.warn("[Import] no workers found");
         toast("シートに作業者が見つかりませんでした", "error");
         setLoading(false);
         console.groupEnd();
         return;
       }
+
+      const {
+        rows: resolvedRows,
+        ambiguous,
+        unresolved,
+        knownFloors,
+        missingIndexes
+      } =
+        await resolveRowsWithFloors(rawRows, {
+          userId: state.site.userId,
+          siteId: state.site.siteId,
+          defaultFloorId: state.site.floorId || ""
+        });
+
+      console.info("[Import] floor mapping", {
+        knownFloors: knownFloors.length,
+        ambiguousAreas: ambiguous,
+        unresolvedAreas: unresolved
+      });
+
+      const rows = resolvedRows;
+      const defaultFloorId = state.site.floorId || "";
+      const missingIndexSet = new Set(missingIndexes || []);
+      const rowsNeedingFloor = rows.filter(
+        (r, idx) => r.areaId && missingIndexSet.has(idx)
+      );
 
       // マスタUpsert
       let newOrUpdated = 0;
@@ -154,20 +363,20 @@ export function renderImport(mount) {
         newOrUpdated++;
       }
 
-      // 自動IN：基本エリアが入っている人のみ（同一サイト・フロアで在籍中判定）
+      // 自動IN：基本エリアが入っている人のみ（同一サイト内で在籍中判定）
       const activeNow = await getActiveAssignments({
         userId: state.site.userId,
-        siteId: state.site.siteId,
-        floorId: state.site.floorId
+        siteId: state.site.siteId
       });
       const assignedSet = new Set(activeNow.map((a) => a.workerId));
       const toAssign = rows.filter(
-        (r) => r.areaId && !assignedSet.has(r.workerId)
+        (r, idx) => r.areaId && !assignedSet.has(r.workerId) && !missingIndexSet.has(idx)
       );
 
       console.info("[Import] auto-assign candidates", {
         activeAssignments: activeNow.length,
-        candidates: toAssign.length
+        candidates: toAssign.length,
+        skipped: rowsNeedingFloor.length
       });
 
       let autoAssignFailures = 0;
@@ -176,7 +385,7 @@ export function renderImport(mount) {
           await createAssignment({
             userId: state.site.userId,
             siteId: state.site.siteId,
-            floorId: state.site.floorId,
+            floorId: r.floorId || defaultFloorId,
             areaId: r.areaId,
             workerId: r.workerId
           });
@@ -198,17 +407,31 @@ export function renderImport(mount) {
         );
       }
 
-      try {
-        await saveDailyRoster({
-          userId: state.site.userId,
-          siteId: state.site.siteId,
-          floorId: state.site.floorId,
-          date: dateStr,
-          workers: rows
-        });
-      } catch (err) {
-        console.error("[Import] saveDailyRoster failed", err);
-        toast("日次の作業者リストの保存に失敗しました", "error");
+      if (rowsNeedingFloor.length > 0) {
+        toast(`フロアが判別できないため${rowsNeedingFloor.length}名は自動配置されませんでした。`, "info");
+      }
+
+      const rosterGroups = new Map();
+      for (const r of rows) {
+        const floorKey = r.floorId || defaultFloorId;
+        const list = rosterGroups.get(floorKey) || [];
+        list.push(r);
+        rosterGroups.set(floorKey, list);
+      }
+
+      for (const [floorId, list] of rosterGroups.entries()) {
+        try {
+          await saveDailyRoster({
+            userId: state.site.userId,
+            siteId: state.site.siteId,
+            floorId,
+            date: dateStr,
+            workers: list
+          });
+        } catch (err) {
+          console.error("[Import] saveDailyRoster failed", { floorId, err });
+          toast("日次の作業者リストの保存に失敗しました", "error");
+        }
       }
 
       // ストア更新（workersを丸ごと保存してDashboard初期描画にも反映）
@@ -221,9 +444,12 @@ export function renderImport(mount) {
       });
 
       const autoInCount = toAssign.length;
-      const dupNote = duplicates.length ? `／重複ID:${duplicates.join(",")}` : "";
-      result.textContent = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）${dupNote}`;
-      toast(`取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件）`);
+      const skippedAuto = rowsNeedingFloor.length;
+      const summary = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件${
+        skippedAuto ? `／未自動配置:${skippedAuto}件` : ""
+      }）`;
+      result.textContent = summary;
+      toast(summary);
     } catch (err) {
       console.error("[Import] unexpected failure", err);
       const message =

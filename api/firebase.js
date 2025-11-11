@@ -344,6 +344,26 @@ export async function getAssignmentsByDate({ userId, siteId, floorId, date }) {
  * areaConfigs（エリア定義）API
  * ========================= */
 
+export async function getAreasOnce({ userId, siteId, floorId }) {
+  assertUserSite({ userId, siteId });
+  const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    return normalizedDefaultAreas();
+  }
+  const data = snap.data();
+  if (!Array.isArray(data?.areas)) {
+    return normalizedDefaultAreas();
+  }
+  return data.areas
+    .map((a, idx) => ({
+      id: a.id || a.areaId || `Z${idx + 1}`,
+      label: a.label || a.name || `エリア${a.id || idx + 1}`,
+      order: typeof a.order === "number" ? a.order : idx
+    }))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
 export function subscribeAreas({ userId, siteId, floorId }, cb) {
   assertUserSite({ userId, siteId });
   const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
@@ -396,6 +416,26 @@ export async function saveAreas({ userId, siteId, floorId, areas }) {
 /* =========================
  * floorConfigs（フロア定義）API
  * ========================= */
+
+export async function getFloorsOnce({ userId, siteId }) {
+  assertUserSite({ userId, siteId });
+  const ref = siteDocument(userId, siteId, "floorConfigs", floorDocId(siteId));
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    return normalizedDefaultFloors();
+  }
+  const data = snap.data();
+  if (!Array.isArray(data?.floors)) {
+    return normalizedDefaultFloors();
+  }
+  return data.floors
+    .map((f, idx) => ({
+      id: f.id || f.floorId || `F${idx + 1}`,
+      label: f.label || f.name || f.id || `F${idx + 1}`,
+      order: typeof f.order === "number" ? f.order : idx
+    }))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
 
 export function subscribeFloors({ userId, siteId }, cb) {
   assertUserSite({ userId, siteId });

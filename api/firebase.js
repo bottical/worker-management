@@ -539,6 +539,13 @@ export async function getDailyRoster({ userId, siteId, floorId, date }) {
  * workers（作業者マスタ）API
  * ========================= */
 
+export async function getWorkersOnce({ userId, siteId }) {
+  assertUserSite({ userId, siteId });
+  const col = siteCollection(userId, siteId, "workers");
+  const snap = await getDocs(col);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 export function subscribeWorkers({ userId, siteId }, cb) {
   assertUserSite({ userId, siteId });
   const col = siteCollection(userId, siteId, "workers");

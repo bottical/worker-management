@@ -3,6 +3,7 @@ import { state, set } from "../core/store.js";
 import { ensureSheetExists, readWorkerRows } from "../api/sheets.js";
 import {
   upsertWorker,
+  getWorkersOnce,
   createAssignment,
   getActiveAssignments,
   saveDailyRoster,
@@ -347,10 +348,26 @@ export function renderImport(mount) {
         (r, idx) => r.areaId && missingIndexSet.has(idx)
       );
 
+      // 既存作業者の取得（重複IDはマスタ更新しない）
+      const existingWorkers = await getWorkersOnce({
+        userId: state.site.userId,
+        siteId: state.site.siteId
+      });
+      const existingWorkerIds = new Set(
+        existingWorkers.map((w) => w.workerId || w.id).filter(Boolean)
+      );
+
       // マスタUpsert
       let newOrUpdated = 0;
-      console.info("[Import] upserting workers", rows.length);
+      let skippedExisting = 0;
+      console.info("[Import] upserting workers", rows.length, {
+        existing: existingWorkerIds.size
+      });
       for (const r of rows) {
+        if (existingWorkerIds.has(r.workerId)) {
+          skippedExisting++;
+          continue;
+        }
         await upsertWorker({
           userId: state.site.userId,
           siteId: state.site.siteId,
@@ -360,6 +377,7 @@ export function renderImport(mount) {
           defaultStartTime: r.defaultStartTime || DEFAULT_START,
           defaultEndTime: r.defaultEndTime || DEFAULT_END
         });
+        existingWorkerIds.add(r.workerId);
         newOrUpdated++;
       }
 
@@ -445,7 +463,9 @@ export function renderImport(mount) {
 
       const autoInCount = toAssign.length;
       const skippedAuto = rowsNeedingFloor.length;
-      const summary = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件／自動配置:${autoInCount}件${
+      const summary = `取り込み成功：${ids.length}名（upsert:${newOrUpdated}件${
+        skippedExisting ? `／既存スキップ:${skippedExisting}件` : ""
+      }／自動配置:${autoInCount}件${
         skippedAuto ? `／未自動配置:${skippedAuto}件` : ""
       }）`;
       result.textContent = summary;

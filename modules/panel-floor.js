@@ -355,7 +355,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   }
 
   function normalizeAreas(list) {
-    if (!Array.isArray(list) || list.length === 0) return DEFAULT_AREAS.slice();
+    if (!Array.isArray(list)) return DEFAULT_AREAS.slice();
     return list
       .map((a, idx) => ({
         id: a.id || a.areaId || `Z${idx + 1}`,

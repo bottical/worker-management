@@ -349,11 +349,11 @@ export async function getAreasOnce({ userId, siteId, floorId }) {
   const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    return normalizedDefaultAreas();
+    return floorId ? [] : normalizedDefaultAreas();
   }
   const data = snap.data();
   if (!Array.isArray(data?.areas)) {
-    return normalizedDefaultAreas();
+    return floorId ? [] : normalizedDefaultAreas();
   }
   return data.areas
     .map((a, idx) => ({
@@ -371,7 +371,7 @@ export function subscribeAreas({ userId, siteId, floorId }, cb) {
     ref,
     (snap) => {
       if (!snap.exists()) {
-        cb(DEFAULT_AREAS.slice());
+        cb(floorId ? [] : DEFAULT_AREAS.slice());
       } else {
         const data = snap.data();
         const areas = Array.isArray(data?.areas)
@@ -380,13 +380,15 @@ export function subscribeAreas({ userId, siteId, floorId }, cb) {
               label: a.label || a.name || `エリア${a.id || idx + 1}`,
               order: typeof a.order === "number" ? a.order : idx
             }))
+          : floorId
+          ? []
           : DEFAULT_AREAS.slice();
         cb(areas.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
       }
     },
     (err) => {
       console.error("subscribeAreas failed", err);
-      cb(DEFAULT_AREAS.slice());
+      cb(floorId ? [] : DEFAULT_AREAS.slice());
     }
   );
 }

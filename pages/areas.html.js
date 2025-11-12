@@ -4,6 +4,7 @@ import {
   saveAreas,
   subscribeFloors,
   saveFloors,
+  getAreasOnce,
   DEFAULT_AREAS,
   DEFAULT_FLOORS
 } from "../api/firebase.js";
@@ -81,6 +82,7 @@ export function renderAreas(mount) {
     state.site.floorId || floors[0]?.id || DEFAULT_FLOORS[0]?.id || "";
   let unsubFloors = () => {};
   let unsubAreas = () => {};
+  const areaCache = new Map();
 
   function currentFloor() {
     return floors.find((f) => f.id === currentFloorId) || null;
@@ -262,6 +264,44 @@ export function renderAreas(mount) {
     });
   }
 
+  async function loadAreasForFloor(floorId) {
+    if (!floorId || areaCache.has(floorId)) {
+      return areaCache.get(floorId) || [];
+    }
+    try {
+      const list = await getAreasOnce({
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        floorId
+      });
+      const normalized = (list || DEFAULT_AREAS)
+        .map((a, idx) => ({
+          id: a.id || `Z${idx + 1}`,
+          label: a.label || `エリア${idx + 1}`,
+          order: typeof a.order === "number" ? a.order : idx
+        }))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      areaCache.set(floorId, normalized);
+      return normalized;
+    } catch (err) {
+      console.error("loadAreasForFloor failed", err);
+      return [];
+    }
+  }
+
+  async function findAreaIdConflict(areaId) {
+    const targetId = (areaId || "").trim();
+    if (!targetId) return null;
+    for (const floor of floors) {
+      if (!floor?.id || floor.id === currentFloorId) continue;
+      const list = await loadAreasForFloor(floor.id);
+      if (list.some((a) => a.id === targetId)) {
+        return floor;
+      }
+    }
+    return null;
+  }
+
   function subscribeAreasForFloor() {
     try {
       unsubAreas();
@@ -288,6 +328,7 @@ export function renderAreas(mount) {
             order: typeof a.order === "number" ? a.order : idx
           }))
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        areaCache.set(currentFloorId, areas.slice());
         renderAreaRows();
       }
     );
@@ -357,6 +398,7 @@ export function renderAreas(mount) {
       label: (a.label || "").trim() || `エリア${idx + 1}`,
       order: idx
     }));
+    areaCache.set(currentFloorId, areas.slice());
     renderAreaRows();
     try {
       await saveAreas({
@@ -407,6 +449,13 @@ export function renderAreas(mount) {
     }
     const next = areas.slice();
     const index = next.findIndex((a) => a.id === areaId);
+    if (index < 0) {
+      const conflict = await findAreaIdConflict(areaId);
+      if (conflict) {
+        toast(`エリアID「${areaId}」はフロア「${conflict.label}」で使用されています`, "error");
+        return;
+      }
+    }
     if (index >= 0) {
       next[index] = { ...next[index], label };
     } else {
@@ -438,6 +487,12 @@ export function renderAreas(mount) {
           order: typeof f.order === "number" ? f.order : idx
         }))
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const knownFloorIds = new Set(floors.map((f) => f.id));
+      Array.from(areaCache.keys()).forEach((key) => {
+        if (!knownFloorIds.has(key)) {
+          areaCache.delete(key);
+        }
+      });
       if (!floors.length) {
         floors = DEFAULT_FLOORS.slice();
       }

@@ -162,19 +162,35 @@ async function fetchCellRange({
     throw err;
   }
 
-  const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]+?)\);?/);
-  if (!match) {
+  const marker = "google.visualization.Query.setResponse(";
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex === -1) {
     const err = new Error("Unexpected response format from Google Sheets");
     err.code = detectErrorCode(text);
     console.warn(`[Sheets] ${feature} unexpected payload`, text.slice(0, 200));
     throw err;
   }
 
+  let jsonPayload = text.slice(markerIndex + marker.length);
+  const closingIndex = jsonPayload.lastIndexOf(")");
+  if (closingIndex === -1) {
+    const err = new Error("Unexpected response payload termination");
+    err.code = detectErrorCode(text);
+    console.warn(`[Sheets] ${feature} missing closing paren`, text.slice(0, 200));
+    throw err;
+  }
+
+  jsonPayload = jsonPayload.slice(0, closingIndex).trim();
+  if (jsonPayload.endsWith(";")) {
+    jsonPayload = jsonPayload.slice(0, -1);
+  }
+
   let data;
   try {
-    data = JSON.parse(match[1]);
+    data = JSON.parse(jsonPayload);
   } catch (err) {
     err.code = detectErrorCode(text);
+    err.payloadSnippet = jsonPayload.slice(0, 200);
     console.warn(`[Sheets] ${feature} JSON parse failed`, err);
     throw err;
   }
@@ -220,10 +236,22 @@ async function fetchCellRange({
   return values;
 }
 
+function normalizeSheetTitle(value) {
+  const { normalized, display } = normalizeReferenceCellValue(value);
+  return {
+    normalized: normalized || "",
+    display: display || ""
+  };
+}
+
 export async function ensureSheetExists({ sheetId, dateStr, referenceCell = "A1" }) {
   try {
     const { column, row } = parseCellReference(referenceCell);
     const targetCell = `${column}${row}`;
+    const {
+      normalized: expectedNormalized,
+      display: expectedDisplay
+    } = normalizeSheetTitle(dateStr);
     const values = await fetchCellRange({
       sheetId,
       sheetTitle: dateStr,
@@ -235,10 +263,11 @@ export async function ensureSheetExists({ sheetId, dateStr, referenceCell = "A1"
     const { normalized: cellValue, display: displayValue } = normalizeReferenceCellValue(
       rawCellValue
     );
-    if (!cellValue || cellValue !== dateStr) {
+    if (!cellValue || cellValue !== expectedNormalized) {
       const err = new Error("Sheet name cell does not match requested sheet");
       err.code = "SHEET_NAME_MISMATCH";
-      err.expected = dateStr;
+      err.expected = expectedDisplay || dateStr;
+      err.expectedNormalized = expectedNormalized;
       err.actual = displayValue;
       err.referenceCell = targetCell;
       throw err;

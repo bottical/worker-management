@@ -6,6 +6,33 @@ const DEFAULT_START = "09:00";
 const DEFAULT_END = "18:00";
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
+const HEX_COLOR_PATTERN = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+const normalizeHex = (input)=>{
+  if(!input) return null;
+  const hex = input.trim();
+  if(!HEX_COLOR_PATTERN.test(hex)) return null;
+  let value = hex.slice(1);
+  if(value.length === 3){
+    value = value.split("").map((c)=>c + c).join("");
+  }
+  return value;
+};
+
+const useLightText = (color)=>{
+  const normalized = normalizeHex(color);
+  if(!normalized) return false;
+  const [r, g, b] = [
+    parseInt(normalized.slice(0, 2), 16) / 255,
+    parseInt(normalized.slice(2, 4), 16) / 255,
+    parseInt(normalized.slice(4, 6), 16) / 255
+  ];
+  const toLinear = (channel)=>{
+    return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+  };
+  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+  return luminance < 0.5;
+};
 
 export function renderUsers(mount){
   const wrap = document.createElement("div");
@@ -57,6 +84,7 @@ export function renderUsers(mount){
           <th data-sort="defaultStartTime" data-label="Start">Start</th>
           <th data-sort="defaultEndTime" data-label="End">End</th>
           <th data-sort="active" data-label="active">active</th>
+          <th data-sort="panelColor" data-label="カード色">カード色</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -152,6 +180,9 @@ export function renderUsers(mount){
     if(key === "defaultEndTime"){
       return row.defaultEndTime || DEFAULT_END;
     }
+    if(key === "panelColor"){
+      return row.panel?.color || row.panelColor || "";
+    }
     return row[key] ?? "";
   };
 
@@ -224,6 +255,11 @@ export function renderUsers(mount){
     tbody.innerHTML = "";
     pageRows.forEach(w=>{
       const tr = document.createElement("tr");
+      const panelColor = w.panel?.color || w.panelColor || "";
+      const useLight = useLightText(panelColor);
+      const panelTextColor = useLight ? "#fff" : "#0f172a";
+      const panelBorderColor = useLight ? "rgba(255,255,255,0.4)" : "rgba(15,23,42,0.2)";
+
       tr.innerHTML = `
         <td class="mono">${w.workerId}</td>
         <td>${w.name||""}</td>
@@ -234,6 +270,7 @@ export function renderUsers(mount){
         <td>${w.defaultStartTime || DEFAULT_START}</td>
         <td>${w.defaultEndTime || DEFAULT_END}</td>
         <td>${w.active ? "✔" : ""}</td>
+        <td>${panelColor ? `<span class="color-chip" style="background:${panelColor};color:${panelTextColor};border-color:${panelBorderColor}">${panelColor}</span>` : ""}</td>
         <td class="row-actions">
           <button data-edit="${w.workerId}" class="button ghost">編集</button>
           <button data-del="${w.workerId}" class="button" style="background:#dc2626">削除</button>

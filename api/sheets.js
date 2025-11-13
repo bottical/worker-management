@@ -41,6 +41,63 @@ function parseCellReference(cell) {
 
 const GVIZ_BASE = "https://docs.google.com/spreadsheets/d";
 
+function toIsoDateStringFromSerial(serial) {
+  const value = Number(serial);
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const base = Date.UTC(1899, 11, 30);
+  const ms = Math.round(value * MS_PER_DAY);
+  const date = new Date(base + ms);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDateString(value) {
+  const str = String(value || "").trim();
+  if (!str) {
+    return "";
+  }
+  const iso = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const [, y, m, d] = iso;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const alt = str.match(/^(\d{4})[\/\.](\d{1,2})[\/\.](\d{1,2})$/);
+  if (alt) {
+    const [, y, m, d] = alt;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const digits = str.replace(/\D/g, "");
+  if (digits.length === 8) {
+    return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  }
+  return str;
+}
+
+function normalizeReferenceCellValue(value) {
+  if (value === null || value === undefined) {
+    return { normalized: "", display: "" };
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const iso = toIsoDateStringFromSerial(value);
+    if (iso) {
+      return { normalized: iso, display: iso };
+    }
+    const str = String(value);
+    return { normalized: str, display: str };
+  }
+  const normalized = normalizeDateString(value);
+  const display = String(value).trim();
+  return { normalized, display };
+}
+
 function buildRange(startCell, endCell) {
   const start = String(startCell || "");
   const end = String(endCell || "");
@@ -174,12 +231,15 @@ export async function ensureSheetExists({ sheetId, dateStr, referenceCell = "A1"
       endCell: targetCell,
       feature: "ensureSheetExists"
     });
-    const cellValue = String(values?.[0]?.[0] ?? "").trim();
+    const rawCellValue = values?.[0]?.[0];
+    const { normalized: cellValue, display: displayValue } = normalizeReferenceCellValue(
+      rawCellValue
+    );
     if (!cellValue || cellValue !== dateStr) {
       const err = new Error("Sheet name cell does not match requested sheet");
       err.code = "SHEET_NAME_MISMATCH";
       err.expected = dateStr;
-      err.actual = cellValue;
+      err.actual = displayValue;
       err.referenceCell = targetCell;
       throw err;
     }

@@ -6,6 +6,7 @@ import {
   DEFAULT_AREAS
 } from "../api/firebase.js";
 import { fmtRange, toast } from "../core/ui.js";
+import { getContrastTextColor } from "../core/colors.js";
 
 /**
  * フロア（ゾーン）側の描画と、在籍の反映を担う
@@ -36,8 +37,19 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       name: w.name || workerId,
       start: w.defaultStartTime || "",
       end: w.defaultEndTime || "",
-      panelColor: w.panelColor || ""
+      panelColor: w.panel?.color || w.panelColor || ""
     };
+  }
+
+  function applyAvatarStyle(avatarEl, color) {
+    if (!avatarEl) return;
+    if (color) {
+      avatarEl.style.background = color;
+      avatarEl.style.color = getContrastTextColor(color);
+    } else {
+      avatarEl.style.background = "";
+      avatarEl.style.color = "";
+    }
   }
 
   function getAreaLabel(areaId) {
@@ -47,8 +59,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     return area.label || `エリア${area.id}`;
   }
 
-  function slotHtml(workerId, areaId, assignmentId) {
-    const info = getWorkerInfo(workerId);
+  function slotHtml(info, workerId, areaId, assignmentId) {
     const meta = fmtRange(info.start, info.end);
     const areaLabel = getAreaLabel(areaId);
     return `
@@ -57,7 +68,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
            data-assignment-id="${assignmentId}"
            data-worker-id="${workerId}"
            data-area-id="${areaId}">
-        <div class="avatar" style="${info.panelColor ? `background:${info.panelColor}` : ""}">
+        <div class="avatar">
           ${info.name.charAt(0)}
         </div>
         <div>
@@ -81,9 +92,14 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   function addSlot(dropEl, workerId, areaId, assignmentId) {
     const slot = document.createElement("div");
     slot.className = "slot";
-    slot.innerHTML = slotHtml(workerId, areaId, assignmentId);
+    const info = getWorkerInfo(workerId);
+    slot.innerHTML = slotHtml(info, workerId, areaId, assignmentId);
+    const card = slot.querySelector(".card");
+    if (!card) return;
+    const avatar = card.querySelector(".avatar");
+    applyAvatarStyle(avatar, info.panelColor);
     // クリックでOUT
-    slot.querySelector(".card").addEventListener("click", async (e) => {
+    card.addEventListener("click", async (e) => {
       if (_readOnly) return;
       const id = e.currentTarget.dataset.assignmentId;
       if (!currentSite?.userId || !currentSite?.siteId) {
@@ -102,7 +118,6 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       }
     });
     // DnD: フロア内移動（エリア間）
-    const card = slot.querySelector(".card");
     toggleCardMode(card);
     card.addEventListener("dragstart", (e) => {
       if (_readOnly) {
@@ -252,8 +267,8 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       const info = getWorkerInfo(workerId);
       const av = card.querySelector(".avatar");
       if (av) {
-        av.style.background = info.panelColor || "";
         av.textContent = info.name.charAt(0);
+        applyAvatarStyle(av, info.panelColor);
       }
       const title = card.querySelector(".mono");
       if (title) {

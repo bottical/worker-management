@@ -1,5 +1,6 @@
 // modules/panel-pool.js
 import { fmtRange } from "../core/ui.js";
+import { getContrastTextColor } from "../core/colors.js";
 
 export function makePool(mount, site) {
   // noop（現状siteは未使用だが将来用）
@@ -17,6 +18,17 @@ export function drawPool(container, workers = [], options = {}) {
   workers.forEach((w) => container.appendChild(card(w, readOnly)));
 }
 
+function applyAvatarStyle(avatarEl, color) {
+  if (!avatarEl) return;
+  if (color) {
+    avatarEl.style.background = color;
+    avatarEl.style.color = getContrastTextColor(color);
+  } else {
+    avatarEl.style.background = "";
+    avatarEl.style.color = "";
+  }
+}
+
 function card(worker, readOnly) {
   const el = document.createElement("div");
   el.className = "card";
@@ -31,7 +43,8 @@ function card(worker, readOnly) {
   const av = document.createElement("div");
   av.className = "avatar";
   av.textContent = (worker.name || worker.workerId || "?").charAt(0);
-  if (worker.panel?.color) av.style.background = worker.panel.color;
+  const panelColor = worker.panel?.color || worker.panelColor || "";
+  applyAvatarStyle(av, panelColor);
 
   const title = document.createElement("div");
   title.className = "mono";

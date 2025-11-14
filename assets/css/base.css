@@ -33,6 +33,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .toast.show{opacity:1;transform:translateY(0)}
 .muted{color:var(--muted)}
 .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+.color-chip{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:12px;line-height:1.4;border:1px solid rgba(15,23,42,0.15);background:var(--chip);color:var(--ink);min-width:72px;justify-content:center;text-transform:uppercase}
 .table{width:100%;border-collapse:collapse;margin-top:10px}
 .table th,.table td{border:1px solid var(--border);padding:6px 8px;font-size:13px}
 .table th{background:#f1f5f9;text-align:left}

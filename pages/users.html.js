@@ -1,12 +1,12 @@
 import { state } from "../core/store.js";
 import { subscribeWorkers, upsertWorker, removeWorker } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
+import { getContrastTextColor, useLightText } from "../core/colors.js";
 
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "18:00";
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
-
 export function renderUsers(mount){
   const wrap = document.createElement("div");
   wrap.className = "panel";
@@ -57,6 +57,7 @@ export function renderUsers(mount){
           <th data-sort="defaultStartTime" data-label="Start">Start</th>
           <th data-sort="defaultEndTime" data-label="End">End</th>
           <th data-sort="active" data-label="active">active</th>
+          <th data-sort="panelColor" data-label="カード色">カード色</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -152,6 +153,9 @@ export function renderUsers(mount){
     if(key === "defaultEndTime"){
       return row.defaultEndTime || DEFAULT_END;
     }
+    if(key === "panelColor"){
+      return row.panel?.color || row.panelColor || "";
+    }
     return row[key] ?? "";
   };
 
@@ -224,6 +228,11 @@ export function renderUsers(mount){
     tbody.innerHTML = "";
     pageRows.forEach(w=>{
       const tr = document.createElement("tr");
+      const panelColor = w.panel?.color || w.panelColor || "";
+      const useLight = useLightText(panelColor);
+      const panelTextColor = getContrastTextColor(panelColor);
+      const panelBorderColor = useLight ? "rgba(255,255,255,0.4)" : "rgba(15,23,42,0.2)";
+
       tr.innerHTML = `
         <td class="mono">${w.workerId}</td>
         <td>${w.name||""}</td>
@@ -234,6 +243,7 @@ export function renderUsers(mount){
         <td>${w.defaultStartTime || DEFAULT_START}</td>
         <td>${w.defaultEndTime || DEFAULT_END}</td>
         <td>${w.active ? "✔" : ""}</td>
+        <td>${panelColor ? `<span class="color-chip" style="background:${panelColor};color:${panelTextColor};border-color:${panelBorderColor}">${panelColor}</span>` : ""}</td>
         <td class="row-actions">
           <button data-edit="${w.workerId}" class="button ghost">編集</button>
           <button data-del="${w.workerId}" class="button" style="background:#dc2626">削除</button>

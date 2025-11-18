@@ -310,10 +310,11 @@ export async function updateAssignmentArea({
 }
 
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */
-export function subscribeActiveAssignments({ userId, siteId, floorId }, cb) {
+export function subscribeActiveAssignments({ userId, siteId, floorId, date }, cb) {
   assertUserSite({ userId, siteId });
+  const targetDate = date || new Date().toISOString().slice(0, 10);
   const col = siteCollection(userId, siteId, "assignments");
-  const filters = [where("outAt", "==", null)];
+  const filters = [where("outAt", "==", null), where("date", "==", targetDate)];
   if (floorId) {
     filters.push(where("floorId", "==", floorId));
   }
@@ -325,10 +326,11 @@ export function subscribeActiveAssignments({ userId, siteId, floorId }, cb) {
 }
 
 /** 在籍中（outAt=null）を一度だけ取得（重複IN防止用） */
-export async function getActiveAssignments({ userId, siteId, floorId }) {
+export async function getActiveAssignments({ userId, siteId, floorId, date }) {
   assertUserSite({ userId, siteId });
+  const targetDate = date || new Date().toISOString().slice(0, 10);
   const col = siteCollection(userId, siteId, "assignments");
-  const filters = [where("outAt", "==", null)];
+  const filters = [where("outAt", "==", null), where("date", "==", targetDate)];
   if (floorId) {
     filters.push(where("floorId", "==", floorId));
   }

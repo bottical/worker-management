@@ -18,8 +18,6 @@ export function renderUsers(mount){
       <label>作業者ID<input name="workerId" required placeholder="ID001"></label>
       <label>氏名<input name="name" placeholder="山田 太郎"></label>
       <label>会社<input name="company" placeholder="THERE"></label>
-      <label>雇用区分<input name="employmentType" placeholder="派遣/正社員など"></label>
-      <label>派遣元<input name="agency" placeholder="派遣会社名"></label>
       <label>スキル（カンマ区切り）<input name="skills" placeholder="検品,梱包"></label>
       <label>開始時間<input name="defaultStartTime" id="defaultStartTime" type="time" placeholder="09:00"></label>
       <label>終了時間<input name="defaultEndTime"   id="defaultEndTime"   type="time" placeholder="18:00"></label>
@@ -51,8 +49,6 @@ export function renderUsers(mount){
           <th data-sort="workerId" data-label="ID">ID</th>
           <th data-sort="name" data-label="氏名">氏名</th>
           <th data-sort="company" data-label="会社">会社</th>
-          <th data-sort="employmentType" data-label="区分">区分</th>
-          <th data-sort="agency" data-label="派遣元">派遣元</th>
           <th data-sort="skills" data-label="skills">skills</th>
           <th data-sort="defaultStartTime" data-label="Start">Start</th>
           <th data-sort="defaultEndTime" data-label="End">End</th>
@@ -237,8 +233,6 @@ export function renderUsers(mount){
         <td class="mono">${w.workerId}</td>
         <td>${w.name||""}</td>
         <td>${w.company||""}</td>
-        <td>${w.employmentType||""}</td>
-        <td>${w.agency||""}</td>
         <td>${(w.skills||[]).join(", ")}</td>
         <td>${w.defaultStartTime || DEFAULT_START}</td>
         <td>${w.defaultEndTime || DEFAULT_END}</td>
@@ -261,8 +255,6 @@ export function renderUsers(mount){
         form.workerId.value = row.workerId;
         form.name.value = row.name||"";
         form.company.value = row.company||"";
-        form.employmentType.value = row.employmentType||"";
-        form.agency.value = row.agency||"";
         form.skills.value = (row.skills||[]).join(", ");
         form.defaultStartTime.value = row.defaultStartTime || DEFAULT_START;
         form.defaultEndTime.value = row.defaultEndTime || DEFAULT_END;

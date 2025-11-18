@@ -22,7 +22,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   let _readOnly = false;
   let currentAssignments = [];
   let currentSite = { ...site };
-  let fallbackZoneEl = null;
+  let fallbackZoneEls = new Map();
 
   mount.innerHTML = "";
   const zonesEl = document.createElement("div");
@@ -52,28 +52,41 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     }
   }
 
-  function getAreaLabel(areaId) {
-    const area = _areas.find((a) => a.id === areaId);
+  function getFloorLabel(floorId) {
+    if (!floorId) return "";
+    const area = _areas.find((a) => a.floorId === floorId && a.floorLabel);
+    return area?.floorLabel || floorId;
+  }
+
+  function getAreaLabel(areaId, floorId = "") {
+    const area = _areas.find(
+      (a) => a.id === areaId && (!floorId || a.floorId === floorId)
+    );
     if (!areaId || areaId === FALLBACK_AREA_ID) return FALLBACK_AREA_LABEL;
     if (!area) return `エリア${areaId}`;
     return area.label || `エリア${area.id}`;
   }
 
-  function slotHtml(info, workerId, areaId, assignmentId) {
+  function slotHtml(info, workerId, areaId, assignmentId, floorId) {
     const meta = fmtRange(info.start, info.end);
-    const areaLabel = getAreaLabel(areaId);
+    const areaLabel = getAreaLabel(areaId, floorId);
+    const floorLabel = getFloorLabel(floorId);
+    const locationLabel = floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
     return `
       <div class="card" draggable="true"
            data-type="placed"
            data-assignment-id="${assignmentId}"
            data-worker-id="${workerId}"
-           data-area-id="${areaId}">
+           data-area-id="${areaId}"
+           data-floor-id="${floorId || ""}">
         <div class="avatar">
           ${info.name.charAt(0)}
         </div>
         <div>
           <div class="mono">${info.name}${meta ? ` ${meta}` : ""}</div>
-          <div class="hint">配置：${areaLabel}${_readOnly ? "（閲覧）" : "（クリックでOUT）"}</div>
+          <div class="hint">配置：${locationLabel}${
+      _readOnly ? "（閲覧）" : "（クリックでOUT）"
+    }</div>
         </div>
       </div>
     `;
@@ -89,11 +102,11 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     toast(kind, "error");
   }
 
-  function addSlot(dropEl, workerId, areaId, assignmentId) {
+  function addSlot(dropEl, workerId, areaId, assignmentId, floorId) {
     const slot = document.createElement("div");
     slot.className = "slot";
     const info = getWorkerInfo(workerId);
-    slot.innerHTML = slotHtml(info, workerId, areaId, assignmentId);
+    slot.innerHTML = slotHtml(info, workerId, areaId, assignmentId, floorId);
     const card = slot.querySelector(".card");
     if (!card) return;
     const avatar = card.querySelector(".avatar");
@@ -128,6 +141,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       e.dataTransfer.setData("workerId", card.dataset.workerId);
       e.dataTransfer.setData("assignmentId", card.dataset.assignmentId);
       e.dataTransfer.setData("fromAreaId", card.dataset.areaId);
+      e.dataTransfer.setData("fromFloorId", card.dataset.floorId || "");
     });
     dropEl.appendChild(slot);
   }
@@ -154,6 +168,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       e.preventDefault();
       const type = e.dataTransfer.getData("type");
       const areaId = drop.dataset.areaId;
+      const dropFloorId = drop.dataset.floorId || currentSite.floorId || "";
       const isFallback = drop.dataset.fallback === "true";
       if (!currentSite?.userId || !currentSite?.siteId) {
         notifyMissingContext();
@@ -166,12 +181,16 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         }
         // 未配置 → IN
         const workerId = e.dataTransfer.getData("workerId");
-        console.info("[Floor] creating assignment", { workerId, areaId });
+        console.info("[Floor] creating assignment", {
+          workerId,
+          areaId,
+          floorId: dropFloorId
+        });
         try {
           await createAssignment({
             userId: currentSite.userId,
             siteId: currentSite.siteId,
-            floorId: currentSite.floorId,
+            floorId: dropFloorId,
             areaId,
             workerId
           });
@@ -182,11 +201,14 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         const assignmentId = e.dataTransfer.getData("assignmentId");
         const workerId = e.dataTransfer.getData("workerId");
         const from = e.dataTransfer.getData("fromAreaId");
+        const fromFloor = e.dataTransfer.getData("fromFloorId");
         if (from === areaId) return; // 同一エリアなら何もしない
         console.info("[Floor] updating assignment area", {
           assignmentId,
           workerId,
           from,
+          fromFloor,
+          toFloor: dropFloorId,
           to: isFallback ? FALLBACK_AREA_ID : areaId
         });
         try {
@@ -195,14 +217,16 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
               userId: currentSite.userId,
               siteId: currentSite.siteId,
               assignmentId,
-              areaId: FALLBACK_AREA_ID
+              areaId: FALLBACK_AREA_ID,
+              floorId: dropFloorId
             });
           } else {
             await updateAssignmentArea({
               userId: currentSite.userId,
               siteId: currentSite.siteId,
               assignmentId,
-              areaId
+              areaId,
+              floorId: dropFloorId
             });
           }
         } catch (err) {
@@ -226,35 +250,32 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
 
   function renderAssignments() {
     zonesEl.querySelectorAll(".droparea").forEach((d) => (d.innerHTML = ""));
-    let fallbackDrop = fallbackZoneEl
-      ? fallbackZoneEl.querySelector(
-          `.droparea[data-area-id="${FALLBACK_AREA_ID}"]`
-        )
-      : null;
-    if (fallbackDrop) fallbackDrop.innerHTML = "";
-    let hasFallbackAssignments = false;
+    fallbackZoneEls.forEach((zone) => {
+      const drop = zone.querySelector(
+        `.droparea[data-area-id="${FALLBACK_AREA_ID}"]`
+      );
+      if (drop) drop.innerHTML = "";
+    });
+    const activeFallbackFloors = new Set();
     currentAssignments.forEach((r) => {
+      const floorId =
+        r.floorId || currentSite.floorId || _areas[0]?.floorId || "";
       let targetAreaId = r.areaId || FALLBACK_AREA_ID;
       let drop = zonesEl.querySelector(
-        `.droparea[data-area-id="${targetAreaId}"]`
+        `.droparea[data-area-id="${targetAreaId}"][data-floor-id="${floorId}"]`
       );
       if (!drop) {
         targetAreaId = FALLBACK_AREA_ID;
       }
       if (targetAreaId === FALLBACK_AREA_ID) {
-        if (!fallbackDrop) {
-          fallbackDrop = ensureFallbackZone();
-        }
-        drop = fallbackDrop;
-        hasFallbackAssignments = true;
+        drop = ensureFallbackZone(floorId);
+        activeFallbackFloors.add(floorId || "__none__");
       }
       if (drop) {
-        addSlot(drop, r.workerId, targetAreaId, r.id);
+        addSlot(drop, r.workerId, targetAreaId, r.id, floorId);
       }
     });
-    if (!hasFallbackAssignments) {
-      removeFallbackZone();
-    }
+    cleanupFallbackZones(activeFallbackFloors);
   }
 
   // 外部（Dashboard）から呼ばれる：workerMapを差し替え→色・時間・表示を更新
@@ -277,7 +298,10 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       }
       const hint = card.querySelector(".hint");
       if (hint) {
-        const label = getAreaLabel(areaId);
+        const floorId = card.dataset.floorId || "";
+        const areaLabel = getAreaLabel(areaId, floorId);
+        const floorLabel = getFloorLabel(floorId);
+        const label = floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
         hint.textContent = `配置：${label}${_readOnly ? "（閲覧）" : "（クリックでOUT）"}`;
       }
       toggleCardMode(card);
@@ -312,16 +336,21 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
 
   function renderZones() {
     zonesEl.innerHTML = "";
-    fallbackZoneEl = null;
+    fallbackZoneEls = new Map();
     _areas.forEach((area) => {
       const zone = document.createElement("div");
       zone.className = "zone";
+      zone.dataset.floorId = area.floorId || "";
       zone.dataset.areaId = area.id;
       const title = document.createElement("h3");
-      title.textContent = area.label || `エリア${area.id}`;
+      const floorLabel = area.floorLabel || getFloorLabel(area.floorId);
+      title.textContent = floorLabel
+        ? `${floorLabel}：${area.label || `エリア${area.id}`}`
+        : area.label || `エリア${area.id}`;
       const drop = document.createElement("div");
       drop.className = "droparea";
       drop.dataset.areaId = area.id;
+      drop.dataset.floorId = area.floorId || "";
       zone.appendChild(title);
       zone.appendChild(drop);
       zonesEl.appendChild(zone);
@@ -329,9 +358,11 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     bindDropzones();
   }
 
-  function ensureFallbackZone() {
-    if (fallbackZoneEl) {
-      const drop = fallbackZoneEl.querySelector(
+  function ensureFallbackZone(floorId) {
+    const key = floorId || "__none__";
+    if (fallbackZoneEls.has(key)) {
+      const zone = fallbackZoneEls.get(key);
+      const drop = zone?.querySelector(
         `.droparea[data-area-id="${FALLBACK_AREA_ID}"]`
       );
       if (drop) {
@@ -343,30 +374,35 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     const zone = document.createElement("div");
     zone.className = "zone fallback";
     zone.dataset.areaId = FALLBACK_AREA_ID;
+    zone.dataset.floorId = floorId || "";
     const title = document.createElement("h3");
-    title.textContent = FALLBACK_AREA_LABEL;
+    const floorLabel = getFloorLabel(floorId);
+    title.textContent = floorLabel
+      ? `${floorLabel}：${FALLBACK_AREA_LABEL}`
+      : FALLBACK_AREA_LABEL;
     const drop = document.createElement("div");
     drop.className = "droparea";
     drop.dataset.areaId = FALLBACK_AREA_ID;
     drop.dataset.fallback = "true";
+    drop.dataset.floorId = floorId || "";
     zone.appendChild(title);
     zone.appendChild(drop);
     zonesEl.appendChild(zone);
-    fallbackZoneEl = zone;
+    fallbackZoneEls.set(key, zone);
     setupDropzone(drop);
     return drop;
   }
 
-  function removeFallbackZone() {
-    if (!fallbackZoneEl) return;
-    const drop = fallbackZoneEl.querySelector(".droparea");
-    if (drop) {
-      drop.innerHTML = "";
-    }
-    if (fallbackZoneEl.parentNode) {
-      fallbackZoneEl.parentNode.removeChild(fallbackZoneEl);
-    }
-    fallbackZoneEl = null;
+  function cleanupFallbackZones(activeFloors = new Set()) {
+    const removeKeys = [];
+    fallbackZoneEls.forEach((zone, key) => {
+      if (activeFloors.has(key)) return;
+      if (zone?.parentNode) {
+        zone.parentNode.removeChild(zone);
+      }
+      removeKeys.push(key);
+    });
+    removeKeys.forEach((k) => fallbackZoneEls.delete(k));
   }
 
   function normalizeAreas(list) {
@@ -375,10 +411,17 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       .map((a, idx) => ({
         id: a.id || a.areaId || `Z${idx + 1}`,
         label: a.label || a.name || `エリア${a.id || idx + 1}`,
-        order: typeof a.order === "number" ? a.order : idx
+        order: typeof a.order === "number" ? a.order : idx,
+        floorId: a.floorId || "",
+        floorLabel: a.floorLabel || "",
+        floorOrder: typeof a.floorOrder === "number" ? a.floorOrder : 0
       }))
       .filter((a) => a.id && a.id !== FALLBACK_AREA_ID)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      .sort((a, b) => {
+        const floorOrderDiff = (a.floorOrder ?? 0) - (b.floorOrder ?? 0);
+        if (floorOrderDiff !== 0) return floorOrderDiff;
+        return (a.order ?? 0) - (b.order ?? 0);
+      });
   }
 
   // グローバルフック（既存実装がこれを呼ぶ）

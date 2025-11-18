@@ -14,6 +14,8 @@ import {
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
+const ALL_FLOOR_VALUE = "__all__";
+
 export function renderDashboard(mount) {
   const todayStr = new Date().toISOString().slice(0, 10);
   let selectedDate = state.assignmentDate || todayStr;
@@ -122,7 +124,14 @@ export function renderDashboard(mount) {
   let floorList = DEFAULT_FLOORS.slice();
 
   // エリア情報
-  let areaList = DEFAULT_AREAS.slice();
+  let areaList = DEFAULT_AREAS.map((a, idx) => ({
+    ...a,
+    floorId: state.site.floorId || DEFAULT_FLOORS[0]?.id || "",
+    floorLabel: state.site.floorId || DEFAULT_FLOORS[0]?.label || "",
+    floorOrder: idx
+  }));
+  const areaCache = new Map();
+  const areaSubscriptions = new Map();
 
   // フロア初期化
   const floorApi = makeFloor(floorEl, state.site, workerMap, areaList);
@@ -131,7 +140,6 @@ export function renderDashboard(mount) {
   // 購読状態
   let latestAssignmentsAll = [];
   let unsubAssign = () => {};
-  let unsubAreas = () => {};
   let unsubFloors = () => {};
 
   function buildWorkerMap() {
@@ -186,12 +194,15 @@ export function renderDashboard(mount) {
     workerMap = buildWorkerMap();
     // フロア（在籍）更新
     floorApi.setWorkerMap(workerMap);
-    const currentFloorId = state.site.floorId;
-    const assignmentsForFloor = currentFloorId
+    const isAllFloorsView = state.site.floorId === ALL_FLOOR_VALUE;
+    const currentFloorId = isAllFloorsView ? "" : state.site.floorId;
+    const assignmentsForView = isAllFloorsView
+      ? latestAssignmentsAll.slice()
+      : currentFloorId
       ? latestAssignmentsAll.filter((a) => a.floorId === currentFloorId)
       : latestAssignmentsAll.slice();
-    const displayAssignments = assignmentsForFloor.slice();
-    const assignedForFloor = new Set(assignmentsForFloor.map((r) => r.workerId));
+    const displayAssignments = assignmentsForView.slice();
+    const assignedForFloor = new Set(assignmentsForView.map((r) => r.workerId));
     const assignedAll = new Set(latestAssignmentsAll.map((r) => r.workerId));
 
     if (isReadOnly && rosterEntries.size) {
@@ -199,7 +210,12 @@ export function renderDashboard(mount) {
       rosterEntries.forEach((entry) => {
         if (!entry?.workerId || !entry.areaId) return;
         const targetFloorId = entry.floorId || currentFloorId || "";
-        if (currentFloorId && targetFloorId && targetFloorId !== currentFloorId) {
+        if (
+          !isAllFloorsView &&
+          currentFloorId &&
+          targetFloorId &&
+          targetFloorId !== currentFloorId
+        ) {
           return;
         }
         if (assignedForFloor.has(entry.workerId)) return;
@@ -385,40 +401,121 @@ export function renderDashboard(mount) {
     reconcile();
   }
 
-  function subscribeAreasForCurrentFloor() {
-    try {
-      unsubAreas();
-    } catch (err) {
-      console.warn("unsubAreas failed", err);
+  function getEffectiveFloors() {
+    const list = floorList && floorList.length ? floorList : DEFAULT_FLOORS;
+    return list.map((f, idx) => ({
+      ...f,
+      order: typeof f.order === "number" ? f.order : idx
+    }));
+  }
+
+  function getFloorLabelMap() {
+    const map = new Map();
+    getEffectiveFloors().forEach((f, idx) => {
+      const order = typeof f.order === "number" ? f.order : idx;
+      map.set(f.id, { label: f.label || f.id, order });
+    });
+    return map;
+  }
+
+  function decorateAreasForFloor(floorId, areas = DEFAULT_AREAS) {
+    const metaMap = getFloorLabelMap();
+    const meta = metaMap.get(floorId) || { label: floorId || "", order: 0 };
+    const list = Array.isArray(areas) && areas.length ? areas : DEFAULT_AREAS;
+    return list.map((a, idx) => ({
+      ...a,
+      floorId,
+      floorLabel: meta.label,
+      floorOrder: typeof meta.order === "number" ? meta.order : idx
+    }));
+  }
+
+  function getTargetFloorsForView() {
+    const floors = getEffectiveFloors();
+    if (state.site.floorId === ALL_FLOOR_VALUE) {
+      return floors.map((f) => f.id).filter(Boolean);
     }
-    unsubAreas = subscribeAreas(
+    const current = state.site.floorId || floors[0]?.id || "";
+    return current ? [current] : [];
+  }
+
+  function cleanupAreaSubscriptions(activeFloors = new Set()) {
+    const removeKeys = [];
+    areaSubscriptions.forEach((unsub, floorId) => {
+      if (activeFloors.has(floorId)) return;
+      try {
+        unsub?.();
+      } catch (err) {
+        console.warn("unsubAreas failed", err);
+      }
+      removeKeys.push(floorId);
+      areaCache.delete(floorId);
+    });
+    removeKeys.forEach((id) => areaSubscriptions.delete(id));
+  }
+
+  function unsubscribeAllAreas() {
+    cleanupAreaSubscriptions(new Set());
+  }
+
+  function ensureAreaSubscription(floorId) {
+    if (!floorId || areaSubscriptions.has(floorId)) return;
+    const unsub = subscribeAreas(
       {
         userId: state.site.userId,
         siteId: state.site.siteId,
-        floorId: state.site.floorId
+        floorId
       },
       (areas) => {
-        areaList = areas;
-        floorApi.setAreas(areaList);
-        reconcile();
+        areaCache.set(floorId, areas);
+        refreshAreasForView();
       }
     );
+    areaSubscriptions.set(floorId, unsub);
+  }
+
+  function refreshAreasForView() {
+    const targets = getTargetFloorsForView();
+    if (!targets.length) {
+      areaList = decorateAreasForFloor("", DEFAULT_AREAS);
+      floorApi.setAreas(areaList);
+      reconcile();
+      return;
+    }
+    const merged = targets.flatMap((floorId) => {
+      const cached = areaCache.get(floorId);
+      return decorateAreasForFloor(floorId, cached);
+    });
+    areaList = merged;
+    floorApi.setAreas(areaList);
+    reconcile();
+  }
+
+  function subscribeAreasForCurrentFloor() {
+    const targets = getTargetFloorsForView();
+    const activeSet = new Set(targets);
+    cleanupAreaSubscriptions(activeSet);
+    if (!targets.length) {
+      refreshAreasForView();
+      return;
+    }
+    targets.forEach((floorId) => ensureAreaSubscription(floorId));
+    refreshAreasForView();
   }
 
   function renderFloorOptions() {
     if (!floorSelect) return;
-    const list = floorList && floorList.length ? floorList : DEFAULT_FLOORS;
-    floorSelect.innerHTML = list
-      .map(
-        (f) =>
-          `<option value="${f.id}">${f.label || f.id}</option>`
-      )
+    const baseList = floorList && floorList.length ? floorList : DEFAULT_FLOORS;
+    const options = [{ id: ALL_FLOOR_VALUE, label: "全体" }, ...baseList];
+    floorSelect.innerHTML = options
+      .map((f) => `<option value="${f.id}">${f.label || f.id}</option>`)
       .join("");
-    const current = state.site.floorId || list[0]?.id || "";
+    const fallback = baseList[0]?.id || ALL_FLOOR_VALUE;
+    const current = state.site.floorId || fallback;
     if (current) {
       floorSelect.value = current;
     }
-    floorSelect.disabled = list.length <= 1;
+    floorSelect.disabled = options.length <= 1;
   }
 
   async function handleFloorChange(newFloorId, { force = false } = {}) {
@@ -453,16 +550,19 @@ export function renderDashboard(mount) {
           Array.isArray(floors) && floors.length
             ? floors
             : DEFAULT_FLOORS.slice();
-      renderFloorOptions();
-      loadRosterForDate(selectedDate).catch((err) => {
-        console.error("loadRosterForDate failed", err);
-      });
-      const hasCurrent = floorList.some((f) => f.id === state.site.floorId);
-      if (!hasCurrent && floorList[0]) {
-        handleFloorChange(floorList[0].id, { force: true }).catch((err) => {
-          console.error("handleFloorChange failed", err);
+        renderFloorOptions();
+        refreshAreasForView();
+        loadRosterForDate(selectedDate).catch((err) => {
+          console.error("loadRosterForDate failed", err);
         });
-      }
+        const hasCurrent =
+          state.site.floorId === ALL_FLOOR_VALUE ||
+          floorList.some((f) => f.id === state.site.floorId);
+        if (!hasCurrent && floorList[0]) {
+          handleFloorChange(floorList[0].id, { force: true }).catch((err) => {
+            console.error("handleFloorChange failed", err);
+          });
+        }
       }
     );
   }
@@ -505,7 +605,7 @@ export function renderDashboard(mount) {
         console.warn("unsubWorkers failed", err);
       }
       try {
-        unsubAreas();
+        unsubscribeAllAreas();
       } catch (err) {
         console.warn("unsubAreas failed", err);
       }

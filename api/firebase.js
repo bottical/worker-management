@@ -289,14 +289,24 @@ export async function closeAssignment({ userId, siteId, assignmentId }) {
 }
 
 /** エリア間の異動（配置済みをドラッグ移動） */
-export async function updateAssignmentArea({ userId, siteId, assignmentId, areaId }) {
+export async function updateAssignmentArea({
+  userId,
+  siteId,
+  assignmentId,
+  areaId,
+  floorId
+}) {
   assertUserSite({ userId, siteId });
   if (!assignmentId) return;
   const ref = siteDocument(userId, siteId, "assignments", assignmentId);
-  await updateDoc(ref, {
+  const payload = {
     areaId,
     updatedAt: serverTimestamp()
-  });
+  };
+  if (typeof floorId === "string") {
+    payload.floorId = floorId;
+  }
+  await updateDoc(ref, payload);
 }
 
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */

@@ -302,14 +302,15 @@ export function renderDashboard(mount) {
     return Array.from(map.values()).map(({ _ts, ...rest }) => rest);
   }
 
-  function startLiveSubscription() {
+  function startLiveSubscription(dateStr = selectedDate) {
     stopLiveSubscription();
     latestAssignmentsAll = [];
     reconcile();
     unsubAssign = subscribeActiveAssignments(
       {
         userId: state.site.userId,
-        siteId: state.site.siteId
+        siteId: state.site.siteId,
+        date: dateStr
       },
       (rows) => {
         latestAssignmentsAll = dedupeAssignments(rows);
@@ -352,7 +353,7 @@ export function renderDashboard(mount) {
     if (selectedDate === todayStr) {
       isReadOnly = false;
       updateViewMode();
-      startLiveSubscription();
+      startLiveSubscription(selectedDate);
     } else {
       isReadOnly = true;
       updateViewMode();

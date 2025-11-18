@@ -484,7 +484,7 @@ export function renderDashboard(mount) {
       return;
     }
     const merged = targets.flatMap((floorId) => {
-      const cached = areaCache.get(floorId);
+      const cached = areaCache.has(floorId) ? areaCache.get(floorId) : [];
       return decorateAreasForFloor(floorId, cached);
     });
     areaList = merged;

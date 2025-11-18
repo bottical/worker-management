@@ -16,7 +16,8 @@ import {
   orderBy,
   getDocs,
   getDoc,
-  writeBatch
+  writeBatch,
+  deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import {
   getAuth,
@@ -568,8 +569,6 @@ export async function upsertWorker({ userId, siteId, ...worker }) {
     workerId: id,
     name: worker.name || "",
     company: worker.company || "",
-    employmentType: worker.employmentType || "",
-    agency: worker.agency || "",
     skills: Array.isArray(worker.skills)
       ? worker.skills
       : (worker.skills || "").split(",").map((s) => s.trim()).filter(Boolean),
@@ -582,6 +581,8 @@ export async function upsertWorker({ userId, siteId, ...worker }) {
         ? worker.panel.badges
         : (worker.badges || "").split(",").map((s) => s.trim()).filter(Boolean)
     },
+    employmentType: deleteField(),
+    agency: deleteField(),
     updatedAt: serverTimestamp()
   };
   await setDoc(ref, payload, { merge: true });

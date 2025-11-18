@@ -422,7 +422,7 @@ export function renderDashboard(mount) {
   function decorateAreasForFloor(floorId, areas = DEFAULT_AREAS) {
     const metaMap = getFloorLabelMap();
     const meta = metaMap.get(floorId) || { label: floorId || "", order: 0 };
-    const list = Array.isArray(areas) && areas.length ? areas : DEFAULT_AREAS;
+    const list = Array.isArray(areas) ? areas : DEFAULT_AREAS;
     return list.map((a, idx) => ({
       ...a,
       floorId,
@@ -484,7 +484,7 @@ export function renderDashboard(mount) {
       return;
     }
     const merged = targets.flatMap((floorId) => {
-      const cached = areaCache.get(floorId);
+      const cached = areaCache.has(floorId) ? areaCache.get(floorId) : [];
       return decorateAreasForFloor(floorId, cached);
     });
     areaList = merged;

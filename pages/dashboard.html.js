@@ -552,7 +552,8 @@ export function renderDashboard(mount) {
             ? floors
             : DEFAULT_FLOORS.slice();
         renderFloorOptions();
-        refreshAreasForView();
+        // フロア構成が更新されたら現在のビューに必要なエリア購読を更新する
+        subscribeAreasForCurrentFloor();
         loadRosterForDate(selectedDate).catch((err) => {
           console.error("loadRosterForDate failed", err);
         });

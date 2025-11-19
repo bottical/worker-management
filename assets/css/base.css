@@ -51,3 +51,20 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .loading-indicator.active{display:inline-flex}
 .loading-indicator .spinner{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:spin 0.9s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.layout-tool{display:grid;grid-template-columns:320px 1fr;gap:16px;margin-top:16px;align-items:start}
+.layout-input textarea{min-height:360px;width:100%;resize:vertical;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;padding:10px;border-radius:10px;border:1px solid var(--border);background:#f8fafc}
+.layout-preview{display:flex;flex-direction:column;gap:12px}
+.layout-board{position:relative;width:100%;border:1px dashed var(--border);border-radius:16px;background:#f8fafc;min-height:320px;overflow:hidden;aspect-ratio:4/3}
+.layout-board::after{content:"";position:absolute;inset:0;background-image:linear-gradient(90deg,rgba(148,163,184,0.2) 1px,transparent 1px),linear-gradient(0deg,rgba(148,163,184,0.2) 1px,transparent 1px);background-size:40px 40px;pointer-events:none}
+.layout-zone{position:absolute;border:2px solid rgba(37,99,235,0.6);border-radius:12px;padding:8px;background:var(--zone-color,#e0f2fe);box-shadow:0 4px 10px rgba(15,23,42,0.12);display:flex;flex-direction:column;gap:6px}
+.layout-zone .zone-title{font-weight:600;font-size:14px}
+.layout-zone .zone-note{font-size:12px;color:var(--muted)}
+.layout-meta{font-weight:600;font-size:16px}
+.zone-list,.layout-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.zone-list li{padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:#fff}
+.zone-label{font-weight:600}
+.zone-meta{font-size:12px;color:var(--muted)}
+.zone-desc{font-size:12px;margin-top:4px}
+.layout-notes li{font-size:13px;color:var(--muted);padding-left:14px;position:relative}
+.layout-notes li::before{content:"・";position:absolute;left:0}
+@media (max-width:900px){.layout-tool{grid-template-columns:1fr}.layout-input textarea{min-height:260px}}

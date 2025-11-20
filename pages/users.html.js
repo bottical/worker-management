@@ -29,6 +29,8 @@ export function renderUsers(mount){
       </label>
       <label>カード色<input name="panelColor" placeholder="#e2e8f0"></label>
       <label>バッジ（カンマ区切り）<input name="badges" placeholder="新人,応援可"></label>
+      <label>就業回数<input name="employmentCount" type="number" min="0" step="1" value="0" placeholder="0"></label>
+      <label style="grid-column:1/-1">備考<textarea name="memo" rows="2" placeholder="メモを入力"></textarea></label>
       <div style="grid-column:1/-1;display:flex;gap:8px;margin-top:4px">
         <button class="button" type="submit">保存</button>
         <button class="button ghost" type="reset">クリア</button>
@@ -54,6 +56,8 @@ export function renderUsers(mount){
           <th data-sort="defaultEndTime" data-label="End">End</th>
           <th data-sort="active" data-label="active">active</th>
           <th data-sort="panelColor" data-label="カード色">カード色</th>
+          <th data-sort="employmentCount" data-label="就業回数">就業回数</th>
+          <th data-sort="memo" data-label="備考">備考</th>
           <th>操作</th>
         </tr>
       </thead>
@@ -79,6 +83,8 @@ export function renderUsers(mount){
   const resetTimeDefaults = ()=>{
     form.defaultStartTime.value = DEFAULT_START;
     form.defaultEndTime.value = DEFAULT_END;
+    form.employmentCount.value = form.employmentCount.value || 0;
+    form.memo.value = "";
   };
 
   resetTimeDefaults();
@@ -94,6 +100,8 @@ export function renderUsers(mount){
     if(!worker.workerId){ toast("作業者IDは必須です","error"); return; }
     worker.defaultStartTime = worker.defaultStartTime || DEFAULT_START;
     worker.defaultEndTime = worker.defaultEndTime || DEFAULT_END;
+    worker.employmentCount = Number(worker.employmentCount || 0);
+    worker.memo = worker.memo || "";
     try{
       await upsertWorker({
         userId: state.site.userId,
@@ -151,6 +159,12 @@ export function renderUsers(mount){
     }
     if(key === "panelColor"){
       return row.panel?.color || row.panelColor || "";
+    }
+    if(key === "employmentCount"){
+      return Number(row.employmentCount || 0);
+    }
+    if(key === "memo"){
+      return row.memo || "";
     }
     return row[key] ?? "";
   };
@@ -228,6 +242,8 @@ export function renderUsers(mount){
       const useLight = useLightText(panelColor);
       const panelTextColor = getContrastTextColor(panelColor);
       const panelBorderColor = useLight ? "rgba(255,255,255,0.4)" : "rgba(15,23,42,0.2)";
+      const employmentCount = Number(w.employmentCount || 0);
+      const memo = w.memo || "";
 
       tr.innerHTML = `
         <td class="mono">${w.workerId}</td>
@@ -238,6 +254,8 @@ export function renderUsers(mount){
         <td>${w.defaultEndTime || DEFAULT_END}</td>
         <td>${w.active ? "✔" : ""}</td>
         <td>${panelColor ? `<span class="color-chip" style="background:${panelColor};color:${panelTextColor};border-color:${panelBorderColor}">${panelColor}</span>` : ""}</td>
+        <td class="mono">${employmentCount}</td>
+        <td>${memo}</td>
         <td class="row-actions">
           <button data-edit="${w.workerId}" class="button ghost">編集</button>
           <button data-del="${w.workerId}" class="button" style="background:#dc2626">削除</button>
@@ -261,6 +279,8 @@ export function renderUsers(mount){
         form.active.value = row.active ? "true" : "false";
         form.panelColor.value = row.panel?.color || "";
         form.badges.value = (row.panel?.badges||[]).join(", ");
+        form.employmentCount.value = Number(row.employmentCount || 0);
+        form.memo.value = row.memo || "";
         window.scrollTo({ top: 0, behavior: "smooth" });
       };
     });
@@ -313,7 +333,9 @@ export function renderUsers(mount){
     currentRows = rows.map((row)=>({
       ...row,
       defaultStartTime: row.defaultStartTime || DEFAULT_START,
-      defaultEndTime: row.defaultEndTime || DEFAULT_END
+      defaultEndTime: row.defaultEndTime || DEFAULT_END,
+      employmentCount: Number(row.employmentCount || 0),
+      memo: row.memo || ""
     }));
     renderTable();
   });

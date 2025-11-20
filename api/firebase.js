@@ -17,7 +17,8 @@ import {
   getDocs,
   getDoc,
   writeBatch,
-  deleteField
+  deleteField,
+  increment
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import {
   getAuth,
@@ -269,6 +270,19 @@ export async function createAssignment({ userId, siteId, floorId, areaId, worker
     updatedAt: serverTimestamp()
   };
   const ref = await addDoc(col, payload);
+  try {
+    const workerRef = siteDocument(userId, siteId, "workers", workerId);
+    await setDoc(
+      workerRef,
+      {
+        employmentCount: increment(1),
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.warn("[Assignments] failed to increment employmentCount", err);
+  }
   return ref.id;
 }
 
@@ -593,6 +607,8 @@ export async function upsertWorker({ userId, siteId, ...worker }) {
         ? worker.panel.badges
         : (worker.badges || "").split(",").map((s) => s.trim()).filter(Boolean)
     },
+    employmentCount: Number(worker.employmentCount || 0),
+    memo: worker.memo || worker.note || "",
     employmentType: deleteField(),
     agency: deleteField(),
     updatedAt: serverTimestamp()

@@ -36,6 +36,20 @@ export const DEFAULT_FLOORS = [
   { id: "1F", label: "1F", order: 0 }
 ];
 
+export const DEFAULT_SKILL_SETTINGS = {
+  skills: [
+    { id: "skill1", name: "スキル1" },
+    { id: "skill2", name: "スキル2" },
+    { id: "skill3", name: "スキル3" },
+    { id: "skill4", name: "スキル4" }
+  ],
+  levels: [
+    { id: "level1", name: "経験なし" },
+    { id: "level2", name: "経験あり" },
+    { id: "level3", name: "プロ" }
+  ]
+};
+
 function areaDocId(siteId, floorId) {
   return `${siteId}__${floorId || "default"}`;
 }
@@ -106,6 +120,48 @@ function normalizedDefaultAreas() {
     }));
 }
 
+function normalizeSkillSettings(settings = {}) {
+  const providedSkills = new Map(
+    Array.isArray(settings.skills)
+      ? settings.skills
+          .map((s, idx) => [s?.id || `skill${idx + 1}`, s])
+          .filter(([id]) => !!id)
+      : []
+  );
+  const providedLevels = new Map(
+    Array.isArray(settings.levels)
+      ? settings.levels
+          .map((l, idx) => [l?.id || `level${idx + 1}`, l])
+          .filter(([id]) => !!id)
+      : []
+  );
+
+  const skills = DEFAULT_SKILL_SETTINGS.skills.map((def, idx) => {
+    const src = providedSkills.get(def.id) || {};
+    const name = (src.name || src.label || `スキル${idx + 1}`).toString().trim();
+    return { id: def.id, name: name || def.name };
+  });
+
+  const levels = DEFAULT_SKILL_SETTINGS.levels.map((def, idx) => {
+    const src = providedLevels.get(def.id) || {};
+    const name = (src.name || src.label || def.name || `レベル${idx + 1}`).toString().trim();
+    return { id: def.id, name: name || def.name };
+  });
+
+  return { skills, levels };
+}
+
+function normalizeSkillLevels(levels = {}) {
+  if (!levels || typeof levels !== "object") return {};
+  const result = {};
+  Object.entries(levels).forEach(([key, value]) => {
+    if (typeof value === "string" && value.trim()) {
+      result[key] = value.trim();
+    }
+  });
+  return result;
+}
+
 export async function ensureDefaultSiteForUser(userId) {
   if (!userId) return null;
   const configured = ENV.defaultSite || {};
@@ -115,6 +171,9 @@ export async function ensureDefaultSiteForUser(userId) {
 
   const siteRef = siteDocRef(userId, siteId);
   const siteSnap = await getDoc(siteRef);
+  const siteData = siteSnap.data() || {};
+  const skillSettings = normalizeSkillSettings(siteData.skillSettings);
+  const shouldUpdateSkills = !siteData.skillSettings;
   if (!siteSnap.exists()) {
     await setDoc(
       siteRef,
@@ -122,7 +181,17 @@ export async function ensureDefaultSiteForUser(userId) {
         siteId,
         label,
         defaultFloorId,
+        skillSettings,
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      },
+      { merge: true }
+    );
+  } else if (shouldUpdateSkills) {
+    await setDoc(
+      siteRef,
+      {
+        skillSettings,
         updatedAt: serverTimestamp()
       },
       { merge: true }
@@ -228,6 +297,37 @@ export function subscribeSites(userId, cb) {
       cb([]);
     }
   );
+}
+
+export function subscribeSkillSettings({ userId, siteId }, cb) {
+  assertUserSite({ userId, siteId });
+  const ref = siteDocRef(userId, siteId);
+  return onSnapshot(
+    ref,
+    (snap) => {
+      const data = snap.data() || {};
+      cb(normalizeSkillSettings(data.skillSettings));
+    },
+    (err) => {
+      console.error("subscribeSkillSettings failed", err);
+      cb(normalizeSkillSettings());
+    }
+  );
+}
+
+export async function saveSkillSettings({ userId, siteId, skillSettings }) {
+  assertUserSite({ userId, siteId });
+  const ref = siteDocRef(userId, siteId);
+  const normalized = normalizeSkillSettings(skillSettings);
+  await setDoc(
+    ref,
+    {
+      skillSettings: normalized,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  );
+  return normalized;
 }
 
 /* =========================
@@ -590,6 +690,7 @@ export async function upsertWorker({ userId, siteId, ...worker }) {
   const id = worker.workerId;
   if (!id) throw new Error("workerId is required");
   await ensureSiteMetadata(userId, siteId);
+  const skillLevels = normalizeSkillLevels(worker.skillLevels || worker.skill_levels);
   const ref = siteDocument(userId, siteId, "workers", id);
   const payload = {
     workerId: id,
@@ -602,11 +703,9 @@ export async function upsertWorker({ userId, siteId, ...worker }) {
     defaultEndTime: worker.defaultEndTime || "",
     active: worker.active === true || worker.active === "true" || worker.active === "on",
     panel: {
-      color: (worker.panel?.color || worker.panelColor || "") || "",
-      badges: Array.isArray(worker.panel?.badges)
-        ? worker.panel.badges
-        : (worker.badges || "").split(",").map((s) => s.trim()).filter(Boolean)
+      color: (worker.panel?.color || worker.panelColor || "") || ""
     },
+    skillLevels,
     employmentCount: Number(worker.employmentCount || 0),
     memo: worker.memo || worker.note || "",
     employmentType: deleteField(),

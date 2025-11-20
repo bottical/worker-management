@@ -105,7 +105,6 @@ export function renderUsers(mount){
 
   let skillSettings = { ...DEFAULT_SKILL_SETTINGS };
   let levelOrder = new Map();
-  updateLevelOrder();
 
   let currentRows = [];
   let sortKey = "workerId";
@@ -113,13 +112,15 @@ export function renderUsers(mount){
   let currentPage = 1;
   let pageSize = DEFAULT_PAGE_SIZE;
 
+  const updateLevelOrder = ()=>{
+    levelOrder = new Map(skillSettings.levels.map((l, idx)=>[l.id, idx]));
+  };
+
+  updateLevelOrder();
+
   const getLevelLabel = (levelId)=>{
     const found = skillSettings.levels.find((l)=>l.id === levelId);
     return found?.name || "";
-  };
-
-  const updateLevelOrder = ()=>{
-    levelOrder = new Map(skillSettings.levels.map((l, idx)=>[l.id, idx]));
   };
 
   const renderSkillConfigInputs = ()=>{

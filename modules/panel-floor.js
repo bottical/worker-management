@@ -23,6 +23,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   let currentAssignments = [];
   let currentSite = { ...site };
   let fallbackZoneEls = new Map();
+  const dragStates = new Map();
 
   mount.innerHTML = "";
   const zonesEl = document.createElement("div");
@@ -85,7 +86,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         <div>
           <div class="mono">${info.name}${meta ? ` ${meta}` : ""}</div>
           <div class="hint">配置：${locationLabel}${
-      _readOnly ? "（閲覧）" : "（クリックでOUT）"
+      _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
     }</div>
         </div>
       </div>
@@ -111,25 +112,6 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     if (!card) return;
     const avatar = card.querySelector(".avatar");
     applyAvatarStyle(avatar, info.panelColor);
-    // クリックでOUT
-    card.addEventListener("click", async (e) => {
-      if (_readOnly) return;
-      const id = e.currentTarget.dataset.assignmentId;
-      if (!currentSite?.userId || !currentSite?.siteId) {
-        notifyMissingContext();
-        return;
-      }
-      try {
-        console.info("[Floor] closing assignment", { assignmentId: id });
-        await closeAssignment({
-          userId: currentSite.userId,
-          siteId: currentSite.siteId,
-          assignmentId: id
-        });
-      } catch (err) {
-        handleActionError("在籍のOUT処理に失敗しました", err);
-      }
-    });
     // DnD: フロア内移動（エリア間）
     toggleCardMode(card);
     card.addEventListener("dragstart", (e) => {
@@ -137,11 +119,39 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         e.preventDefault();
         return;
       }
+      dragStates.set(card.dataset.assignmentId, { handled: false });
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = "move";
+      }
       e.dataTransfer.setData("type", "placed");
       e.dataTransfer.setData("workerId", card.dataset.workerId);
       e.dataTransfer.setData("assignmentId", card.dataset.assignmentId);
       e.dataTransfer.setData("fromAreaId", card.dataset.areaId);
       e.dataTransfer.setData("fromFloorId", card.dataset.floorId || "");
+    });
+    card.addEventListener("dragend", async (e) => {
+      const assignmentId = card.dataset.assignmentId;
+      const state = dragStates.get(assignmentId);
+      dragStates.delete(assignmentId);
+      const dropEffect = e.dataTransfer?.dropEffect;
+      const droppedOutside = !state?.handled && dropEffect !== "move";
+      if (_readOnly || !droppedOutside) return;
+      if (!currentSite?.userId || !currentSite?.siteId) {
+        notifyMissingContext();
+        return;
+      }
+      try {
+        console.info("[Floor] closing assignment via outside drop", {
+          assignmentId
+        });
+        await closeAssignment({
+          userId: currentSite.userId,
+          siteId: currentSite.siteId,
+          assignmentId
+        });
+      } catch (err) {
+        handleActionError("在籍のOUT処理に失敗しました", err);
+      }
     });
     dropEl.appendChild(slot);
   }
@@ -199,6 +209,8 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         }
       } else if (type === "placed") {
         const assignmentId = e.dataTransfer.getData("assignmentId");
+        const state = dragStates.get(assignmentId);
+        if (state) state.handled = true;
         const workerId = e.dataTransfer.getData("workerId");
         const from = e.dataTransfer.getData("fromAreaId");
         const fromFloor = e.dataTransfer.getData("fromFloorId");
@@ -302,7 +314,9 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
         const areaLabel = getAreaLabel(areaId, floorId);
         const floorLabel = getFloorLabel(floorId);
         const label = floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
-        hint.textContent = `配置：${label}${_readOnly ? "（閲覧）" : "（クリックでOUT）"}`;
+        hint.textContent = `配置：${label}${
+          _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
+        }`;
       }
       toggleCardMode(card);
     });

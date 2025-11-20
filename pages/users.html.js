@@ -105,7 +105,6 @@ export function renderUsers(mount){
 
   let skillSettings = { ...DEFAULT_SKILL_SETTINGS };
   let levelOrder = new Map();
-  updateLevelOrder();
 
   let currentRows = [];
   let sortKey = "workerId";
@@ -113,13 +112,27 @@ export function renderUsers(mount){
   let currentPage = 1;
   let pageSize = DEFAULT_PAGE_SIZE;
 
-  const getLevelLabel = (levelId)=>{
-    const found = skillSettings.levels.find((l)=>l.id === levelId);
-    return found?.name || "";
+  const updateSortIndicators = () => {
+    wrap.querySelectorAll("th[data-sort]").forEach((th)=>{
+      const key = th.dataset.sort;
+      const label = th.dataset.label || th.textContent;
+      let indicator = "";
+      if(key === sortKey){
+        indicator = sortDir === "asc" ? " ▲" : " ▼";
+      }
+      th.textContent = `${label}${indicator}`;
+    });
   };
 
   const updateLevelOrder = ()=>{
     levelOrder = new Map(skillSettings.levels.map((l, idx)=>[l.id, idx]));
+  };
+
+  updateLevelOrder();
+
+  const getLevelLabel = (levelId)=>{
+    const found = skillSettings.levels.find((l)=>l.id === levelId);
+    return found?.name || "";
   };
 
   const renderSkillConfigInputs = ()=>{
@@ -304,18 +317,6 @@ export function renderUsers(mount){
     currentPage = 1;
     renderTable();
   });
-
-  const updateSortIndicators = () => {
-    wrap.querySelectorAll("th[data-sort]").forEach((th)=>{
-      const key = th.dataset.sort;
-      const label = th.dataset.label || th.textContent;
-      let indicator = "";
-      if(key === sortKey){
-        indicator = sortDir === "asc" ? " ▲" : " ▼";
-      }
-      th.textContent = `${label}${indicator}`;
-    });
-  };
 
   const getFieldValue = (row, key)=>{
     if(key.startsWith("skill_")){

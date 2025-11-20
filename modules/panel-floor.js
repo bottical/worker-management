@@ -38,7 +38,11 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
       name: w.name || workerId,
       start: w.defaultStartTime || "",
       end: w.defaultEndTime || "",
-      panelColor: w.panel?.color || w.panelColor || ""
+      panelColor: w.panel?.color || w.panelColor || "",
+      employmentCount: typeof w.employmentCount === "number"
+        ? w.employmentCount
+        : Number(w.employmentCount || 0),
+      memo: w.memo || ""
     };
   }
 
@@ -73,6 +77,16 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     const areaLabel = getAreaLabel(areaId, floorId);
     const floorLabel = getFloorLabel(floorId);
     const locationLabel = floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
+    const detailLines = [];
+    if (typeof info.employmentCount === "number") {
+      detailLines.push(`就業回数: ${info.employmentCount}回`);
+    }
+    if (info.memo) {
+      detailLines.push(`備考: ${info.memo}`);
+    }
+    const detailHtml = detailLines.length
+      ? detailLines.map((line) => `<div class="hint">${line}</div>`).join("")
+      : "";
     return `
       <div class="card" draggable="true"
            data-type="placed"
@@ -88,6 +102,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
           <div class="hint">配置：${locationLabel}${
       _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
     }</div>
+          ${detailHtml}
         </div>
       </div>
     `;

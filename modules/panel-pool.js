@@ -55,9 +55,21 @@ function card(worker, readOnly) {
   hint.className = "hint";
   hint.textContent = readOnly ? "閲覧モード" : "ドラッグで配置（IN）";
 
+  const detail = document.createElement("div");
+  detail.className = "hint";
+  const employmentCount = Number(worker.employmentCount || 0);
+  const memo = worker.memo || "";
+  const detailParts = [];
+  detailParts.push(`就業回数: ${employmentCount}回`);
+  if (memo) {
+    detailParts.push(`備考: ${memo}`);
+  }
+  detail.textContent = detailParts.join(" / ");
+
   const right = document.createElement("div");
   right.appendChild(title);
   right.appendChild(hint);
+  right.appendChild(detail);
 
   el.appendChild(av);
   el.appendChild(right);

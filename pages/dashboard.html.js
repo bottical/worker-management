@@ -65,6 +65,8 @@ export function renderDashboard(mount) {
         name: row,
         defaultStartTime: "",
         defaultEndTime: "",
+        employmentCount: 0,
+        memo: "",
         panel: { color: "" }
       };
     }
@@ -75,6 +77,8 @@ export function renderDashboard(mount) {
       name: row.name || workerId,
       defaultStartTime: row.defaultStartTime || "",
       defaultEndTime: row.defaultEndTime || "",
+      employmentCount: Number(row.employmentCount || 0),
+      memo: row.memo || "",
       panel: { color: row.panel?.color || row.panelColor || "" }
     };
   }
@@ -107,7 +111,9 @@ export function renderDashboard(mount) {
         name: w.name || w.workerId,
         defaultStartTime: w.defaultStartTime || "",
         defaultEndTime: w.defaultEndTime || "",
-        panelColor: w.panel?.color || ""
+        panelColor: w.panel?.color || "",
+        employmentCount: Number(w.employmentCount || 0),
+        memo: w.memo || ""
       }
     ])
   );
@@ -150,7 +156,9 @@ export function renderDashboard(mount) {
           name: entry.name || entry.workerId,
           defaultStartTime: "",
           defaultEndTime: "",
-          panelColor: ""
+          panelColor: "",
+          employmentCount: 0,
+          memo: ""
         });
       }
     });
@@ -160,7 +168,9 @@ export function renderDashboard(mount) {
         name: row.workerId,
         defaultStartTime: "",
         defaultEndTime: "",
-        panelColor: ""
+        panelColor: "",
+        employmentCount: 0,
+        memo: ""
       });
     });
     return map;
@@ -176,6 +186,8 @@ export function renderDashboard(mount) {
           name: master.name,
           defaultStartTime: master.defaultStartTime,
           defaultEndTime: master.defaultEndTime,
+          employmentCount: Number(master.employmentCount || 0),
+          memo: master.memo || "",
           panel: { color: master.panel?.color || "" }
         };
       }
@@ -184,6 +196,8 @@ export function renderDashboard(mount) {
         name: entry.name || entry.workerId,
         defaultStartTime: "",
         defaultEndTime: "",
+        employmentCount: 0,
+        memo: "",
         panel: { color: "" }
       };
     });
@@ -264,7 +278,9 @@ export function renderDashboard(mount) {
           name: w.name,
           defaultStartTime: w.defaultStartTime,
           defaultEndTime: w.defaultEndTime,
-          panelColor: w.panel?.color || ""
+          panelColor: w.panel?.color || "",
+          employmentCount: Number(w.employmentCount || 0),
+          memo: w.memo || ""
         }
       ])
     );

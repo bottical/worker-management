@@ -13,7 +13,6 @@ import {
   query,
   where,
   onSnapshot,
-  orderBy,
   getDocs,
   getDoc,
   writeBatch,
@@ -678,11 +677,17 @@ export async function getWorkersOnce({ userId, siteId }) {
 export function subscribeWorkers({ userId, siteId }, cb) {
   assertUserSite({ userId, siteId });
   const col = siteCollection(userId, siteId, "workers");
-  const q1 = query(col, orderBy("name", "asc"));
-  return onSnapshot(q1, (snap) => {
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    cb(list);
-  });
+  return onSnapshot(
+    col,
+    (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      cb(list);
+    },
+    (err) => {
+      console.error("subscribeWorkers failed", err);
+      cb([]);
+    }
+  );
 }
 
 export async function upsertWorker({ userId, siteId, ...worker }) {

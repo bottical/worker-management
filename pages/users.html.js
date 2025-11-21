@@ -8,7 +8,6 @@ import {
   removeWorker
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
-import { getContrastTextColor, useLightText } from "../core/colors.js";
 
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "18:00";
@@ -67,12 +66,16 @@ export function renderUsers(mount){
       </div>
     </form>
 
-    <div class="panel-toolbar" id="listControls" style="margin-top:0">
-      <label>表示件数
+    <div class="panel-toolbar" id="listControls" style="margin-top:0;gap:12px;align-items:center">
+      <label style="margin:0">表示件数
         <select id="pageSize">
           ${PAGE_SIZE_OPTIONS.map((size)=>`<option value="${size}">${size}件</option>`).join("")}
         </select>
       </label>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="pendingStatus" class="hint" style="margin:0">修正なし</span>
+        <button class="button" type="button" id="applyEdits" disabled>修正実行</button>
+      </div>
     </div>
 
     <table class="table" id="list">
@@ -102,6 +105,8 @@ export function renderUsers(mount){
   const skillNameFields = wrap.querySelector("#skillNameFields");
   const skillLevelFields = wrap.querySelector("#skillLevelFields");
   const listHeader = wrap.querySelector("#listHeader");
+  const pendingStatus = wrap.querySelector("#pendingStatus");
+  const applyEditsBtn = wrap.querySelector("#applyEdits");
 
   let skillSettings = { ...DEFAULT_SKILL_SETTINGS };
   let levelOrder = new Map();
@@ -111,6 +116,17 @@ export function renderUsers(mount){
   let sortDir = "asc";
   let currentPage = 1;
   let pageSize = DEFAULT_PAGE_SIZE;
+  const pendingEdits = new Map();
+
+  const updatePendingStatus = ()=>{
+    const count = pendingEdits.size;
+    if(pendingStatus){
+      pendingStatus.textContent = count ? `修正待ち: ${count}件` : "修正なし";
+    }
+    if(applyEditsBtn){
+      applyEditsBtn.disabled = !count;
+    }
+  };
 
   const updateSortIndicators = () => {
     wrap.querySelectorAll("th[data-sort]").forEach((th)=>{
@@ -236,6 +252,7 @@ export function renderUsers(mount){
   renderSkillConfigInputs();
   renderSkillFields();
   buildTableHeader();
+  updatePendingStatus();
 
   form.addEventListener("reset", ()=>{
     setTimeout(resetTimeDefaults, 0);
@@ -318,6 +335,40 @@ export function renderUsers(mount){
     renderTable();
   });
 
+  if(applyEditsBtn){
+    applyEditsBtn.addEventListener("click", async ()=>{
+      if(!pendingEdits.size){
+        toast("修正はありません");
+        return;
+      }
+      applyEditsBtn.disabled = true;
+      const originalLabel = applyEditsBtn.textContent;
+      applyEditsBtn.textContent = "保存中...";
+      const errors = [];
+      for(const [workerId, worker] of Array.from(pendingEdits.entries())){
+        try{
+          await upsertWorker({
+            userId: state.site.userId,
+            siteId: state.site.siteId,
+            ...worker
+          });
+          pendingEdits.delete(workerId);
+        }catch(err){
+          errors.push(workerId);
+          console.error(err);
+        }
+      }
+      applyEditsBtn.textContent = originalLabel || "修正実行";
+      applyEditsBtn.disabled = false;
+      updatePendingStatus();
+      if(errors.length){
+        toast(`保存に失敗しました: ${errors.join(", ")}`,"error");
+      }else{
+        toast("修正を反映しました");
+      }
+    });
+  }
+
   const getFieldValue = (row, key)=>{
     if(key.startsWith("skill_")){
       const levelId = row.skillLevels?.[key.replace("skill_", "")] || "";
@@ -344,6 +395,111 @@ export function renderUsers(mount){
       return row.memo || "";
     }
     return row[key] ?? "";
+  };
+
+  const normalizeForCompare = (worker)=>({
+    workerId: worker.workerId,
+    name: worker.name || "",
+    company: worker.company || "",
+    defaultStartTime: worker.defaultStartTime || DEFAULT_START,
+    defaultEndTime: worker.defaultEndTime || DEFAULT_END,
+    active: !!worker.active,
+    panelColor: worker.panel?.color || worker.panelColor || "",
+    employmentCount: Number(worker.employmentCount || 0),
+    memo: worker.memo || "",
+    skillLevels: normalizeSkillLevels(worker.skillLevels)
+  });
+
+  const isSameWorker = (a,b)=>{
+    return JSON.stringify(normalizeForCompare(a)) === JSON.stringify(normalizeForCompare(b));
+  };
+
+  const readRowInputs = (tr)=>{
+    const workerId = tr.dataset.workerId;
+    const base = currentRows.find(r=>r.workerId === workerId) || {};
+    const name = tr.querySelector('input[data-field="name"]')?.value || "";
+    const company = tr.querySelector('input[data-field="company"]')?.value || "";
+    const defaultStartTime = tr.querySelector('input[data-field="defaultStartTime"]')?.value || DEFAULT_START;
+    const defaultEndTime = tr.querySelector('input[data-field="defaultEndTime"]')?.value || DEFAULT_END;
+    const active = (tr.querySelector('select[data-field="active"]')?.value || "true") === "true";
+    const panelColor = tr.querySelector('input[data-field="panelColor"]')?.value || "";
+    const employmentCount = Number(tr.querySelector('input[data-field="employmentCount"]')?.value || 0);
+    const memo = tr.querySelector('textarea[data-field="memo"]')?.value || "";
+    const skillLevels = {};
+    tr.querySelectorAll('select[data-field="skill"]').forEach((select)=>{
+      const skillId = select.dataset.skillId;
+      const val = select.value || "";
+      if(val){
+        skillLevels[skillId] = val;
+      }
+    });
+    const skills = skillSettings.skills
+      .map((skill)=>{
+        const levelId = skillLevels[skill.id];
+        const label = getLevelLabel(levelId);
+        return levelId && label ? `${skill.name}: ${label}` : "";
+      })
+      .filter(Boolean);
+
+    return {
+      ...base,
+      workerId,
+      name,
+      company,
+      defaultStartTime,
+      defaultEndTime,
+      active,
+      panelColor,
+      employmentCount,
+      memo,
+      skillLevels,
+      skills
+    };
+  };
+
+  const setRowInputs = (tr, data)=>{
+    const setVal = (selector, value)=>{
+      const el = tr.querySelector(selector);
+      if(!el) return;
+      if(el.tagName === "TEXTAREA"){
+        el.value = value || "";
+      }else{
+        el.value = value || "";
+      }
+    };
+    setVal('input[data-field="name"]', data.name || "");
+    setVal('input[data-field="company"]', data.company || "");
+    setVal('input[data-field="defaultStartTime"]', data.defaultStartTime || DEFAULT_START);
+    setVal('input[data-field="defaultEndTime"]', data.defaultEndTime || DEFAULT_END);
+    setVal('select[data-field="active"]', data.active ? "true" : "false");
+    setVal('input[data-field="panelColor"]', data.panel?.color || data.panelColor || "");
+    setVal('input[data-field="employmentCount"]', Number(data.employmentCount || 0));
+    setVal('textarea[data-field="memo"]', data.memo || "");
+    tr.querySelectorAll('select[data-field="skill"]').forEach((select)=>{
+      const skillId = select.dataset.skillId;
+      select.value = data.skillLevels?.[skillId] || "";
+    });
+  };
+
+  const captureRowEdit = (tr)=>{
+    const next = readRowInputs(tr);
+    const base = currentRows.find(r=>r.workerId === next.workerId);
+    if(base && isSameWorker(base, next)){
+      pendingEdits.delete(next.workerId);
+    }else{
+      pendingEdits.set(next.workerId, next);
+    }
+    updatePendingStatus();
+  };
+
+  const resetRowInputs = (workerId)=>{
+    const tr = tbody.querySelector(`tr[data-worker-id="${workerId}"]`);
+    const base = currentRows.find(r=>r.workerId === workerId);
+    if(tr && base){
+      setRowInputs(tr, base);
+      pendingEdits.delete(workerId);
+      updatePendingStatus();
+    }
   };
 
   const renderPager = (totalPages)=>{
@@ -415,57 +571,56 @@ export function renderUsers(mount){
     tbody.innerHTML = "";
     pageRows.forEach(w=>{
       const tr = document.createElement("tr");
-      const panelColor = w.panel?.color || w.panelColor || "";
-      const useLight = useLightText(panelColor);
-      const panelTextColor = getContrastTextColor(panelColor);
-      const panelBorderColor = useLight ? "rgba(255,255,255,0.4)" : "rgba(15,23,42,0.2)";
-      const employmentCount = Number(w.employmentCount || 0);
-      const memo = w.memo || "";
+      tr.dataset.workerId = w.workerId;
+      const source = pendingEdits.get(w.workerId) || w;
+      const employmentCount = Number(source.employmentCount || 0);
+      const memo = source.memo || "";
       const skillCells = skillSettings.skills
         .map((skill)=>{
-          const levelId = w.skillLevels?.[skill.id] || "";
-          const label = getLevelLabel(levelId);
-          return `<td>${label || ""}</td>`;
+          const levelId = source.skillLevels?.[skill.id] || "";
+          const options = ["", ...skillSettings.levels.map((l)=>l.id)]
+            .map((val)=>{
+              const label = val ? getLevelLabel(val) : "未設定";
+              const selected = val === levelId ? "selected" : "";
+              return `<option value=\"${val}\" ${selected}>${label}</option>`;
+            })
+            .join("");
+          return `<td><select data-field=\"skill\" data-skill-id=\"${skill.id}\">${options}</select></td>`;
         })
         .join("");
 
       tr.innerHTML = `
         <td class="mono">${w.workerId}</td>
-        <td>${w.name||""}</td>
-        <td>${w.company||""}</td>
+        <td><input data-field="name" value="${source.name || ""}" placeholder="山田 太郎"></td>
+        <td><input data-field="company" value="${source.company || ""}" placeholder="THERE"></td>
         ${skillCells}
-        <td>${w.defaultStartTime || DEFAULT_START}</td>
-        <td>${w.defaultEndTime || DEFAULT_END}</td>
-        <td>${w.active ? "✔" : ""}</td>
-        <td>${panelColor ? `<span class="color-chip" style="background:${panelColor};color:${panelTextColor};border-color:${panelBorderColor}">${panelColor}</span>` : ""}</td>
-        <td class="mono">${employmentCount}</td>
-        <td>${memo}</td>
-        <td class="row-actions">
-          <button data-edit="${w.workerId}" class="button ghost">編集</button>
+        <td><input data-field="defaultStartTime" type="time" value="${source.defaultStartTime || DEFAULT_START}"></td>
+        <td><input data-field="defaultEndTime" type="time" value="${source.defaultEndTime || DEFAULT_END}"></td>
+        <td>
+          <select data-field="active">
+            <option value="true" ${source.active !== false ? "selected" : ""}>有効</option>
+            <option value="false" ${source.active === false ? "selected" : ""}>無効</option>
+          </select>
+        </td>
+        <td><input data-field="panelColor" value="${source.panel?.color || source.panelColor || ""}" placeholder="#e2e8f0"></td>
+        <td class="mono"><input data-field="employmentCount" type="number" min="0" step="1" value="${employmentCount}" style="width:100%"></td>
+        <td><textarea data-field="memo" rows="1">${memo}</textarea></td>
+        <td class="row-actions" style="white-space:nowrap">
+          <button data-reset="${w.workerId}" class="button ghost">元に戻す</button>
           <button data-del="${w.workerId}" class="button" style="background:#dc2626">削除</button>
         </td>
       `;
       tbody.appendChild(tr);
-    });
 
-    // 編集
-    tbody.querySelectorAll("button[data-edit]").forEach(btn=>{
-      btn.onclick = ()=>{
-        const id = btn.dataset.edit;
-        const row = currentRows.find(r=>r.workerId===id);
-        if(!row) return;
-        form.workerId.value = row.workerId;
-        form.name.value = row.name||"";
-        form.company.value = row.company||"";
-        form.defaultStartTime.value = row.defaultStartTime || DEFAULT_START;
-        form.defaultEndTime.value = row.defaultEndTime || DEFAULT_END;
-        form.active.value = row.active ? "true" : "false";
-        form.panelColor.value = row.panel?.color || "";
-        form.employmentCount.value = Number(row.employmentCount || 0);
-        form.memo.value = row.memo || "";
-        setSkillFormValues(row.skillLevels || {});
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      };
+      tr.querySelectorAll("input, select, textarea").forEach((el)=>{
+        const evt = el.tagName === "SELECT" ? "change" : "input";
+        el.addEventListener(evt, ()=>captureRowEdit(tr));
+      });
+
+      const resetBtn = tr.querySelector("button[data-reset]");
+      if(resetBtn){
+        resetBtn.onclick = ()=>resetRowInputs(w.workerId);
+      }
     });
 
     // 削除
@@ -489,42 +644,48 @@ export function renderUsers(mount){
     });
 
     renderPager(totalPages);
+    updatePendingStatus();
     updateSortIndicators();
   };
 
-  const unsubWorkers = subscribeWorkers(
-    {
-      userId: state.site.userId,
-      siteId: state.site.siteId
-    },
-    (rows)=>{
-    currentRows = rows.map((row)=>(
+    const unsubWorkers = subscribeWorkers(
       {
-        ...row,
-        defaultStartTime: row.defaultStartTime || DEFAULT_START,
-        defaultEndTime: row.defaultEndTime || DEFAULT_END,
-        employmentCount: Number(row.employmentCount || 0),
-        memo: row.memo || "",
-        skillLevels: normalizeSkillLevels(row.skillLevels)
+        userId: state.site.userId,
+        siteId: state.site.siteId
+      },
+      (rows)=>{
+        currentRows = rows.map((row)=>(
+          {
+            ...row,
+            defaultStartTime: row.defaultStartTime || DEFAULT_START,
+            defaultEndTime: row.defaultEndTime || DEFAULT_END,
+            employmentCount: Number(row.employmentCount || 0),
+            memo: row.memo || "",
+            skillLevels: normalizeSkillLevels(row.skillLevels)
+          }
+        ));
+        const ids = new Set(currentRows.map((r)=>r.workerId));
+        Array.from(pendingEdits.keys()).forEach((id)=>{
+          if(!ids.has(id)) pendingEdits.delete(id);
+        });
+        renderTable();
       }
-    ));
-    renderTable();
-  });
+    );
 
-  const unsubSkillSettings = subscribeSkillSettings(
-    {
-      userId: state.site.userId,
-      siteId: state.site.siteId
-    },
-    (settings)=>{
-      skillSettings = settings || { ...DEFAULT_SKILL_SETTINGS };
-      updateLevelOrder();
-      renderSkillConfigInputs();
-      renderSkillFields();
-      buildTableHeader();
-      renderTable();
-    }
-  );
+    const unsubSkillSettings = subscribeSkillSettings(
+      {
+        userId: state.site.userId,
+        siteId: state.site.siteId
+      },
+      (settings)=>{
+        skillSettings = settings || { ...DEFAULT_SKILL_SETTINGS };
+        updateLevelOrder();
+        renderSkillConfigInputs();
+        renderSkillFields();
+        buildTableHeader();
+        renderTable();
+      }
+    );
 
   // ページ離脱時
   window.addEventListener("hashchange", ()=>{ try{unsubWorkers();}catch{} try{unsubSkillSettings();}catch{} }, { once:true });

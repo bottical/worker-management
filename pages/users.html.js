@@ -33,38 +33,56 @@ export function renderUsers(mount){
     <div class="hint">作業者マスタの追加・編集・削除ができます。</div>
 
     <section class="panel-sub" id="skillConfigSection" style="margin-top:12px">
-      <h3>スキル設定</h3>
-      <div class="hint">スキル名とステータス名を編集できます（4種×3段階）。</div>
-      <form id="skillConfigForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px">
-        <div id="skillNameFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
-        <div id="skillLevelFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
-        <div class="form-actions" style="grid-column:1/-1">
-          <button class="button" type="submit">スキル設定を保存</button>
+      <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap">
+        <div>
+          <h3 style="margin:0">スキル設定</h3>
+          <div class="hint" style="margin:4px 0 0">スキル名とステータス名を編集できます（4種×3段階）。</div>
         </div>
-      </form>
+        <button class="button ghost" type="button" id="toggleSkillConfig">スキル設定を編集</button>
+      </div>
+      <div id="skillConfigContent" style="display:none;margin-top:12px">
+        <form id="skillConfigForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px">
+          <div id="skillNameFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
+          <div id="skillLevelFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
+          <div class="form-actions" style="grid-column:1/-1">
+            <button class="button" type="submit">スキル設定を保存</button>
+          </div>
+        </form>
+      </div>
     </section>
 
-    <form id="form" style="display:grid;grid-template-columns:repeat(4, minmax(180px,1fr));gap:8px;margin:12px 0">
-      <label>作業者ID<input name="workerId" required placeholder="ID001"></label>
-      <label>氏名<input name="name" placeholder="山田 太郎"></label>
-      <label>会社<input name="company" placeholder="THERE"></label>
-      <label>開始時間<input name="defaultStartTime" id="defaultStartTime" type="time" placeholder="09:00"></label>
-      <label>終了時間<input name="defaultEndTime"   id="defaultEndTime"   type="time" placeholder="18:00"></label>
-      <label>有効
-        <select name="active">
-          <option value="true" selected>有効</option>
-          <option value="false">無効</option>
-        </select>
-      </label>
-      <label>カード色<input name="panelColor" placeholder="#e2e8f0"></label>
-      <label>就業回数<input name="employmentCount" type="number" min="0" step="1" value="0" placeholder="0"></label>
-      <div id="skillFields" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px"></div>
-      <label style="grid-column:1/-1">備考<textarea name="memo" rows="2" placeholder="メモを入力"></textarea></label>
-      <div style="grid-column:1/-1;display:flex;gap:8px;margin-top:4px">
-        <button class="button" type="submit">保存</button>
-        <button class="button ghost" type="reset">クリア</button>
+    <section class="panel-sub" id="workerFormSection" style="margin-top:12px">
+      <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap">
+        <div>
+          <h3 style="margin:0">新規登録</h3>
+          <div class="hint" style="margin:4px 0 0">作業者の新規登録や基本情報を設定できます。</div>
+        </div>
+        <button class="button ghost" type="button" id="toggleWorkerForm">新規登録フォームを開く</button>
       </div>
-    </form>
+      <div id="workerFormContent" style="display:none;margin-top:12px">
+        <form id="form" style="display:grid;grid-template-columns:repeat(4, minmax(180px,1fr));gap:8px;margin:12px 0">
+          <label>作業者ID<input name="workerId" required placeholder="ID001"></label>
+          <label>氏名<input name="name" placeholder="山田 太郎"></label>
+          <label>会社<input name="company" placeholder="THERE"></label>
+          <label>開始時間<input name="defaultStartTime" id="defaultStartTime" type="time" placeholder="09:00"></label>
+          <label>終了時間<input name="defaultEndTime"   id="defaultEndTime"   type="time" placeholder="18:00"></label>
+          <label>有効
+            <select name="active">
+              <option value="true" selected>有効</option>
+              <option value="false">無効</option>
+            </select>
+          </label>
+          <label>カード色<input name="panelColor" placeholder="#e2e8f0"></label>
+          <label>就業回数<input name="employmentCount" type="number" min="0" step="1" value="0" placeholder="0"></label>
+          <div id="skillFields" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px"></div>
+          <label style="grid-column:1/-1">備考<textarea name="memo" rows="2" placeholder="メモを入力"></textarea></label>
+          <div style="grid-column:1/-1;display:flex;gap:8px;margin-top:4px">
+            <button class="button" type="submit">保存</button>
+            <button class="button ghost" type="reset">クリア</button>
+          </div>
+        </form>
+      </div>
+    </section>
 
     <div class="panel-toolbar" id="listControls" style="margin-top:0;gap:12px;align-items:center">
       <label style="margin:0">表示件数
@@ -104,12 +122,18 @@ export function renderUsers(mount){
   const skillConfigForm = wrap.querySelector("#skillConfigForm");
   const skillNameFields = wrap.querySelector("#skillNameFields");
   const skillLevelFields = wrap.querySelector("#skillLevelFields");
+  const skillConfigContent = wrap.querySelector("#skillConfigContent");
+  const skillConfigToggle = wrap.querySelector("#toggleSkillConfig");
+  const workerFormContent = wrap.querySelector("#workerFormContent");
+  const workerFormToggle = wrap.querySelector("#toggleWorkerForm");
   const listHeader = wrap.querySelector("#listHeader");
   const pendingStatus = wrap.querySelector("#pendingStatus");
   const applyEditsBtn = wrap.querySelector("#applyEdits");
 
   let skillSettings = { ...DEFAULT_SKILL_SETTINGS };
   let levelOrder = new Map();
+  let isSkillConfigOpen = false;
+  let isWorkerFormOpen = false;
 
   let currentRows = [];
   let sortKey = "workerId";
@@ -142,6 +166,26 @@ export function renderUsers(mount){
 
   const updateLevelOrder = ()=>{
     levelOrder = new Map(skillSettings.levels.map((l, idx)=>[l.id, idx]));
+  };
+
+  const setSkillConfigVisibility = (open)=>{
+    isSkillConfigOpen = !!open;
+    if(skillConfigContent){
+      skillConfigContent.style.display = open ? "block" : "none";
+    }
+    if(skillConfigToggle){
+      skillConfigToggle.textContent = open ? "スキル設定を閉じる" : "スキル設定を編集";
+    }
+  };
+
+  const setWorkerFormVisibility = (open)=>{
+    isWorkerFormOpen = !!open;
+    if(workerFormContent){
+      workerFormContent.style.display = open ? "block" : "none";
+    }
+    if(workerFormToggle){
+      workerFormToggle.textContent = open ? "新規登録フォームを閉じる" : "新規登録フォームを開く";
+    }
   };
 
   updateLevelOrder();
@@ -197,6 +241,21 @@ export function renderUsers(mount){
       .join("");
     setSkillFormValues(existingValues);
   };
+
+  if(workerFormToggle){
+    workerFormToggle.addEventListener("click", ()=>{
+      setWorkerFormVisibility(!isWorkerFormOpen);
+    });
+  }
+
+  if(skillConfigToggle){
+    skillConfigToggle.addEventListener("click", ()=>{
+      setSkillConfigVisibility(!isSkillConfigOpen);
+    });
+  }
+
+  setWorkerFormVisibility(false);
+  setSkillConfigVisibility(false);
 
   const buildTableHeader = ()=>{
     if(!listHeader) return;

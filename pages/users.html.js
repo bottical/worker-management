@@ -33,15 +33,22 @@ export function renderUsers(mount){
     <div class="hint">作業者マスタの追加・編集・削除ができます。</div>
 
     <section class="panel-sub" id="skillConfigSection" style="margin-top:12px">
-      <h3>スキル設定</h3>
-      <div class="hint">スキル名とステータス名を編集できます（4種×3段階）。</div>
-      <form id="skillConfigForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px">
-        <div id="skillNameFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
-        <div id="skillLevelFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
-        <div class="form-actions" style="grid-column:1/-1">
-          <button class="button" type="submit">スキル設定を保存</button>
+      <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap">
+        <div>
+          <h3 style="margin:0">スキル設定</h3>
+          <div class="hint" style="margin:4px 0 0">スキル名とステータス名を編集できます（4種×3段階）。</div>
         </div>
-      </form>
+        <button class="button ghost" type="button" id="toggleSkillConfig">スキル設定を編集</button>
+      </div>
+      <div id="skillConfigContent" style="display:none;margin-top:12px">
+        <form id="skillConfigForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px">
+          <div id="skillNameFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
+          <div id="skillLevelFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
+          <div class="form-actions" style="grid-column:1/-1">
+            <button class="button" type="submit">スキル設定を保存</button>
+          </div>
+        </form>
+      </div>
     </section>
 
     <form id="form" style="display:grid;grid-template-columns:repeat(4, minmax(180px,1fr));gap:8px;margin:12px 0">
@@ -104,12 +111,15 @@ export function renderUsers(mount){
   const skillConfigForm = wrap.querySelector("#skillConfigForm");
   const skillNameFields = wrap.querySelector("#skillNameFields");
   const skillLevelFields = wrap.querySelector("#skillLevelFields");
+  const skillConfigContent = wrap.querySelector("#skillConfigContent");
+  const skillConfigToggle = wrap.querySelector("#toggleSkillConfig");
   const listHeader = wrap.querySelector("#listHeader");
   const pendingStatus = wrap.querySelector("#pendingStatus");
   const applyEditsBtn = wrap.querySelector("#applyEdits");
 
   let skillSettings = { ...DEFAULT_SKILL_SETTINGS };
   let levelOrder = new Map();
+  let isSkillConfigOpen = false;
 
   let currentRows = [];
   let sortKey = "workerId";
@@ -142,6 +152,16 @@ export function renderUsers(mount){
 
   const updateLevelOrder = ()=>{
     levelOrder = new Map(skillSettings.levels.map((l, idx)=>[l.id, idx]));
+  };
+
+  const setSkillConfigVisibility = (open)=>{
+    isSkillConfigOpen = !!open;
+    if(skillConfigContent){
+      skillConfigContent.style.display = open ? "block" : "none";
+    }
+    if(skillConfigToggle){
+      skillConfigToggle.textContent = open ? "スキル設定を閉じる" : "スキル設定を編集";
+    }
   };
 
   updateLevelOrder();
@@ -197,6 +217,14 @@ export function renderUsers(mount){
       .join("");
     setSkillFormValues(existingValues);
   };
+
+  if(skillConfigToggle){
+    skillConfigToggle.addEventListener("click", ()=>{
+      setSkillConfigVisibility(!isSkillConfigOpen);
+    });
+  }
+
+  setSkillConfigVisibility(false);
 
   const buildTableHeader = ()=>{
     if(!listHeader) return;

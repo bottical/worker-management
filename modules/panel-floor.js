@@ -16,7 +16,13 @@ import { getContrastTextColor } from "../core/colors.js";
 const FALLBACK_AREA_ID = "__unassigned__";
 const FALLBACK_AREA_LABEL = "未割当";
 
-export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AREAS) {
+export function makeFloor(
+  mount,
+  site,
+  workerMap = new Map(),
+  areas = DEFAULT_AREAS,
+  options = {}
+) {
   let _workerMap = new Map(workerMap || []);
   let _areas = normalizeAreas(areas);
   let _readOnly = false;
@@ -24,6 +30,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
   let currentSite = { ...site };
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
+  const { onEditWorker } = options;
 
   mount.innerHTML = "";
   const zonesEl = document.createElement("div");
@@ -94,6 +101,7 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
            data-worker-id="${workerId}"
            data-area-id="${areaId}"
            data-floor-id="${floorId || ""}">
+        <button class="card-action" data-action="edit-worker" title="作業員情報を編集">⚙</button>
         <div class="avatar">
           ${info.name.charAt(0)}
         </div>
@@ -127,6 +135,16 @@ export function makeFloor(mount, site, workerMap = new Map(), areas = DEFAULT_AR
     if (!card) return;
     const avatar = card.querySelector(".avatar");
     applyAvatarStyle(avatar, info.panelColor);
+    const settingsBtn = card.querySelector('[data-action="edit-worker"]');
+    if (settingsBtn) {
+      settingsBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof onEditWorker === "function") {
+          onEditWorker(card.dataset.workerId);
+        }
+      });
+    }
     // DnD: フロア内移動（エリア間）
     toggleCardMode(card);
     card.addEventListener("dragstart", (e) => {

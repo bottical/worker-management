@@ -334,7 +334,14 @@ export async function saveSkillSettings({ userId, siteId, skillSettings }) {
  * ========================= */
 
 /** 在籍開始（IN） */
-export async function createAssignment({ userId, siteId, floorId, areaId, workerId }) {
+export async function createAssignment({
+  userId,
+  siteId,
+  floorId,
+  areaId,
+  workerId,
+  isLeader
+}) {
   assertUserSite({ userId, siteId });
   if (!workerId) throw new Error("workerId is required");
   await ensureSiteMetadata(userId, siteId);
@@ -362,6 +369,7 @@ export async function createAssignment({ userId, siteId, floorId, areaId, worker
     floorId: floorId || "",
     areaId: areaId || "",
     workerId,
+    isLeader: Boolean(isLeader),
     date: new Date().toISOString().slice(0, 10),
     inAt: serverTimestamp(),
     outAt: null,
@@ -420,6 +428,22 @@ export async function updateAssignmentArea({
     payload.floorId = floorId;
   }
   await updateDoc(ref, payload);
+}
+
+/** 在籍のリーダー設定変更 */
+export async function updateAssignmentLeader({
+  userId,
+  siteId,
+  assignmentId,
+  isLeader
+}) {
+  assertUserSite({ userId, siteId });
+  if (!assignmentId) return;
+  const ref = siteDocument(userId, siteId, "assignments", assignmentId);
+  await updateDoc(ref, {
+    isLeader: Boolean(isLeader),
+    updatedAt: serverTimestamp()
+  });
 }
 
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */
@@ -626,7 +650,8 @@ export async function saveDailyRoster({ userId, siteId, floorId, date, workers }
   const sanitized = (workers || []).map((w) => ({
     workerId: w.workerId,
     name: w.name || "",
-    areaId: w.areaId || ""
+    areaId: w.areaId || "",
+    isLeader: Boolean(w.isLeader)
   }));
   await ensureSiteMetadata(userId, siteId);
   const ref = siteDocument(userId, siteId, "dailyRosters", rosterDocId(siteId, floorId || "", date));
@@ -657,7 +682,8 @@ export async function getDailyRoster({ userId, siteId, floorId, date }) {
     ? data.workers.map((w) => ({
         workerId: w.workerId,
         name: w.name || w.workerId,
-        areaId: w.areaId || ""
+        areaId: w.areaId || "",
+        isLeader: Boolean(w.isLeader)
       }))
     : [];
   return { workers };

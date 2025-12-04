@@ -29,6 +29,22 @@ function applyAvatarStyle(avatarEl, color) {
   }
 }
 
+function applyLeaderMark(titleEl, isLeader) {
+  if (!titleEl) return;
+  let mark = titleEl.querySelector(".leader-mark");
+  if (isLeader) {
+    if (!mark) {
+      mark = document.createElement("span");
+      mark.className = "leader-mark";
+      mark.textContent = "★";
+      titleEl.appendChild(mark);
+    }
+    mark.title = "リーダー";
+  } else if (mark) {
+    mark.remove();
+  }
+}
+
 function card(worker, readOnly, onEditWorker) {
   const el = document.createElement("div");
   el.className = "card";
@@ -50,6 +66,7 @@ function card(worker, readOnly, onEditWorker) {
   title.className = "mono";
   const meta = fmtRange(worker.defaultStartTime, worker.defaultEndTime);
   title.textContent = `${worker.name || worker.workerId}${meta ? ` ${meta}` : ""}`;
+  applyLeaderMark(title, worker.isLeader);
 
   const hint = document.createElement("div");
   hint.className = "hint";

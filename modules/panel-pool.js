@@ -13,9 +13,9 @@ export function makePool(mount, site) {
  * @param {Array} workers - [{workerId,name,defaultStartTime,defaultEndTime,panel:{color}}]
  */
 export function drawPool(container, workers = [], options = {}) {
-  const { readOnly = false } = options;
+  const { readOnly = false, onEditWorker } = options;
   container.innerHTML = "";
-  workers.forEach((w) => container.appendChild(card(w, readOnly)));
+  workers.forEach((w) => container.appendChild(card(w, readOnly, onEditWorker)));
 }
 
 function applyAvatarStyle(avatarEl, color) {
@@ -29,7 +29,7 @@ function applyAvatarStyle(avatarEl, color) {
   }
 }
 
-function card(worker, readOnly) {
+function card(worker, readOnly, onEditWorker) {
   const el = document.createElement("div");
   el.className = "card";
   if (!readOnly) {
@@ -71,8 +71,22 @@ function card(worker, readOnly) {
   right.appendChild(hint);
   right.appendChild(detail);
 
+  const settingsBtn = document.createElement("button");
+  settingsBtn.type = "button";
+  settingsBtn.className = "card-action";
+  settingsBtn.textContent = "⚙";
+  settingsBtn.title = "作業員情報を編集";
+  settingsBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof onEditWorker === "function") {
+      onEditWorker(worker.workerId);
+    }
+  });
+
   el.appendChild(av);
   el.appendChild(right);
+  el.appendChild(settingsBtn);
 
   // DnD
   if (!readOnly) {

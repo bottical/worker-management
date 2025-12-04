@@ -10,7 +10,8 @@ import {
   subscribeFloors,
   getDailyRoster,
   DEFAULT_AREAS,
-  DEFAULT_FLOORS
+  DEFAULT_FLOORS,
+  upsertWorker
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
@@ -139,8 +140,34 @@ export function renderDashboard(mount) {
   const areaCache = new Map();
   const areaSubscriptions = new Map();
 
+  const workerEditor = createWorkerEditor();
+
+  function getWorkerForEditing(workerId) {
+    const master = masterWorkerLookup.get(workerId) || {};
+    const mapEntry = workerMap.get(workerId) || {};
+    const rosterEntry = rosterEntries.get(workerId) || {};
+    return {
+      workerId,
+      name: master.name || mapEntry.name || rosterEntry.name || workerId,
+      defaultStartTime:
+        master.defaultStartTime || mapEntry.defaultStartTime || "",
+      defaultEndTime: master.defaultEndTime || mapEntry.defaultEndTime || "",
+      employmentCount:
+        Number(master.employmentCount ?? mapEntry.employmentCount ?? 0) || 0,
+      memo: master.memo || mapEntry.memo || "",
+      panelColor: master.panel?.color || mapEntry.panelColor || ""
+    };
+  }
+
+  function openWorkerEditor(workerId) {
+    if (!workerId) return;
+    workerEditor.open(getWorkerForEditing(workerId));
+  }
+
   // フロア初期化
-  const floorApi = makeFloor(floorEl, state.site, workerMap, areaList);
+  const floorApi = makeFloor(floorEl, state.site, workerMap, areaList, {
+    onEditWorker: openWorkerEditor
+  });
   makePool(poolEl, state.site);
 
   // 購読状態
@@ -252,7 +279,10 @@ export function renderDashboard(mount) {
     // プール（未配置= roster ー assigned）
     const rosterWorkers = rosterWorkersForPool();
     const notAssigned = rosterWorkers.filter((w) => !assignedAll.has(w.workerId));
-    drawPool(poolEl, notAssigned, { readOnly: isReadOnly });
+    drawPool(poolEl, notAssigned, {
+      readOnly: isReadOnly,
+      onEditWorker: openWorkerEditor
+    });
     countEl.textContent = String(notAssigned.length);
     updateViewMode();
   }
@@ -612,6 +642,106 @@ export function renderDashboard(mount) {
   loadAssignmentsForDate(selectedDate);
   updateViewMode();
 
+  function createWorkerEditor() {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+      <div class="modal">
+        <h3>作業員情報を編集</h3>
+        <form class="form" id="workerEditForm">
+          <label>作業員ID<input name="workerId" disabled></label>
+          <label>氏名<input name="name" placeholder="氏名"></label>
+          <label>開始時刻<input type="time" name="defaultStartTime"></label>
+          <label>終了時刻<input type="time" name="defaultEndTime"></label>
+          <label>就業回数<input type="number" name="employmentCount" min="0"></label>
+          <label>表示色<input name="panelColor" placeholder="#2563eb"></label>
+          <label>備考<textarea name="memo" placeholder="メモや特記事項"></textarea></label>
+          <div class="actions">
+            <button type="button" class="button ghost" data-cancel>閉じる</button>
+            <button type="submit" class="button" data-save>保存</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const form = overlay.querySelector("form");
+    const cancelBtn = overlay.querySelector("[data-cancel]");
+    const saveBtn = overlay.querySelector("[data-save]");
+    const workerIdInput = overlay.querySelector('input[name="workerId"]');
+    const nameInput = overlay.querySelector('input[name="name"]');
+    const startInput = overlay.querySelector('input[name="defaultStartTime"]');
+    const endInput = overlay.querySelector('input[name="defaultEndTime"]');
+    const countInput = overlay.querySelector('input[name="employmentCount"]');
+    const colorInput = overlay.querySelector('input[name="panelColor"]');
+    const memoInput = overlay.querySelector('textarea[name="memo"]');
+    let currentWorkerId = "";
+
+    function close() {
+      overlay.classList.remove("show");
+    }
+
+    function open(worker) {
+      if (!worker) return;
+      currentWorkerId = worker.workerId || "";
+      workerIdInput.value = currentWorkerId;
+      nameInput.value = worker.name || currentWorkerId;
+      startInput.value = worker.defaultStartTime || "";
+      endInput.value = worker.defaultEndTime || "";
+      countInput.value = Number(worker.employmentCount || 0);
+      colorInput.value = worker.panelColor || "";
+      memoInput.value = worker.memo || "";
+      overlay.classList.add("show");
+      nameInput.focus();
+    }
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close();
+    });
+
+    cancelBtn?.addEventListener("click", (e) => {
+      e.preventDefault();
+      close();
+    });
+
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!currentWorkerId) return;
+      if (!state.site?.userId || !state.site?.siteId) {
+        toast("サイト情報が不足しているため保存できません", "error");
+        return;
+      }
+      const payload = {
+        workerId: currentWorkerId,
+        name: nameInput.value.trim() || currentWorkerId,
+        defaultStartTime: startInput.value || "",
+        defaultEndTime: endInput.value || "",
+        employmentCount: Number(countInput.value || 0),
+        memo: memoInput.value || "",
+        panel: { color: colorInput.value.trim() || "" },
+        active: true
+      };
+      try {
+        if (saveBtn) saveBtn.disabled = true;
+        if (saveBtn) saveBtn.textContent = "保存中...";
+        await upsertWorker({
+          userId: state.site.userId,
+          siteId: state.site.siteId,
+          ...payload
+        });
+        toast(`保存しました：${currentWorkerId}`);
+        close();
+      } catch (err) {
+        console.error("[Dashboard] failed to save worker", err);
+        toast("作業員の保存に失敗しました", "error");
+      } finally {
+        if (saveBtn) saveBtn.disabled = false;
+        if (saveBtn) saveBtn.textContent = "保存";
+      }
+    });
+
+    return { open, close };
+  }
+
   // アンマウント
   window.addEventListener(
     "hashchange",
@@ -636,6 +766,11 @@ export function renderDashboard(mount) {
         floorApi.unmount?.();
       } catch (err) {
         console.error("floorApi.unmount failed", err);
+      }
+      try {
+        workerEditor?.close?.();
+      } catch (err) {
+        console.error("workerEditor.close failed", err);
       }
     },
     { once: true }

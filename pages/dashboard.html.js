@@ -166,7 +166,10 @@ export function renderDashboard(mount) {
       employmentCount:
         Number(master.employmentCount ?? mapEntry.employmentCount ?? 0) || 0,
       memo: master.memo || mapEntry.memo || "",
-      panelColor: master.panel?.color || mapEntry.panelColor || ""
+      panelColor: master.panel?.color || mapEntry.panelColor || "",
+      skillLevels: normalizeSkillLevels(
+        master.skillLevels || mapEntry.skillLevels || rosterEntry.skillLevels
+      )
     };
   }
 
@@ -751,6 +754,7 @@ export function renderDashboard(mount) {
     const memoInput = overlay.querySelector('textarea[name="memo"]');
     const leaderInput = overlay.querySelector('input[name="isLeader"]');
     let currentWorkerId = "";
+    let currentSkillLevels = {};
 
     function close() {
       overlay.classList.remove("show");
@@ -769,6 +773,7 @@ export function renderDashboard(mount) {
       if (leaderInput) {
         leaderInput.checked = Boolean(getLeaderFlag(worker.workerId));
       }
+      currentSkillLevels = normalizeSkillLevels(worker.skillLevels);
       overlay.classList.add("show");
       nameInput.focus();
     }
@@ -847,7 +852,8 @@ export function renderDashboard(mount) {
         employmentCount: Number(countInput.value || 0),
         memo: memoInput.value || "",
         panel: { color: colorInput.value.trim() || "" },
-        active: true
+        active: true,
+        skillLevels: currentSkillLevels
       };
       const isLeaderToday = Boolean(leaderInput?.checked);
       try {

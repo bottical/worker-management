@@ -1,6 +1,8 @@
 // modules/panel-pool.js
 import { fmtRange } from "../core/ui.js";
 import { getContrastTextColor } from "../core/colors.js";
+import { DEFAULT_SKILL_SETTINGS } from "../api/firebase.js";
+import { createSkillColumns, normalizeSkillLevels } from "./skill-layout.js";
 
 export function makePool(mount, site) {
   // noop（現状siteは未使用だが将来用）
@@ -13,41 +15,82 @@ export function makePool(mount, site) {
  * @param {Array} workers - [{workerId,name,defaultStartTime,defaultEndTime,panel:{color}}]
  */
 export function drawPool(container, workers = [], options = {}) {
-  const { readOnly = false, onEditWorker } = options;
+  const {
+    readOnly = false,
+    onEditWorker,
+    skillSettings = DEFAULT_SKILL_SETTINGS
+  } = options;
   container.innerHTML = "";
-  workers.forEach((w) => container.appendChild(card(w, readOnly, onEditWorker)));
+  workers.forEach((w) =>
+    container.appendChild(card(w, readOnly, onEditWorker, skillSettings))
+  );
 }
 
-function applyAvatarStyle(avatarEl, color) {
-  if (!avatarEl) return;
+function applyAccent(el, color) {
+  if (!el) return;
   if (color) {
-    avatarEl.style.background = color;
-    avatarEl.style.color = getContrastTextColor(color);
+    el.style.setProperty("--card-accent", color);
+    el.style.setProperty("--card-accent-text", getContrastTextColor(color));
   } else {
-    avatarEl.style.background = "";
-    avatarEl.style.color = "";
+    el.style.removeProperty("--card-accent");
+    el.style.removeProperty("--card-accent-text");
   }
 }
 
-function applyLeaderMark(titleEl, isLeader) {
-  if (!titleEl) return;
-  let mark = titleEl.querySelector(".leader-mark");
-  if (isLeader) {
-    if (!mark) {
-      mark = document.createElement("span");
-      mark.className = "leader-mark";
-      mark.textContent = "★";
-      titleEl.appendChild(mark);
-    }
-    mark.title = "リーダー";
-  } else if (mark) {
-    mark.remove();
+function buildCardBody(worker, readOnly) {
+  const body = document.createElement("div");
+  body.className = "card-body";
+
+  const header = document.createElement("div");
+  header.className = "card-header";
+
+  if (worker.isLeader) {
+    const leader = document.createElement("span");
+    leader.className = "leader-mark";
+    leader.title = "リーダー";
+    leader.textContent = "★";
+    header.appendChild(leader);
   }
+
+  const name = document.createElement("div");
+  name.className = "card-name";
+  name.textContent = worker.name || worker.workerId || "?";
+  header.appendChild(name);
+
+  const employment = document.createElement("div");
+  employment.className = "employment-count";
+  employment.innerHTML = `<span class="count">${Number(
+    worker.employmentCount || 0
+  )}</span><span class="unit">回</span>`;
+  header.appendChild(employment);
+
+  const time = document.createElement("div");
+  time.className = "card-time";
+  const meta = fmtRange(worker.defaultStartTime, worker.defaultEndTime);
+  time.textContent = meta || "時間未設定";
+
+  const memo = document.createElement("div");
+  memo.className = "card-memo hint";
+  memo.textContent = worker.memo ? `備考: ${worker.memo}` : "備考: -";
+
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = readOnly ? "閲覧モード" : "ドラッグで配置（IN）";
+
+  body.appendChild(header);
+  body.appendChild(time);
+  body.appendChild(memo);
+  body.appendChild(hint);
+
+  return body;
 }
 
-function card(worker, readOnly, onEditWorker) {
+function card(worker, readOnly, onEditWorker, skillSettings) {
   const el = document.createElement("div");
   el.className = "card";
+  const panelColor = worker.panel?.color || worker.panelColor || "";
+  applyAccent(el, panelColor);
+
   if (!readOnly) {
     el.setAttribute("draggable", "true");
     el.dataset.type = "pool";
@@ -56,37 +99,11 @@ function card(worker, readOnly, onEditWorker) {
     el.classList.add("readonly");
   }
 
-  const av = document.createElement("div");
-  av.className = "avatar";
-  av.textContent = (worker.name || worker.workerId || "?").charAt(0);
-  const panelColor = worker.panel?.color || worker.panelColor || "";
-  applyAvatarStyle(av, panelColor);
-
-  const title = document.createElement("div");
-  title.className = "mono";
-  const meta = fmtRange(worker.defaultStartTime, worker.defaultEndTime);
-  title.textContent = `${worker.name || worker.workerId}${meta ? ` ${meta}` : ""}`;
-  applyLeaderMark(title, worker.isLeader);
-
-  const hint = document.createElement("div");
-  hint.className = "hint";
-  hint.textContent = readOnly ? "閲覧モード" : "ドラッグで配置（IN）";
-
-  const detail = document.createElement("div");
-  detail.className = "hint";
-  const employmentCount = Number(worker.employmentCount || 0);
-  const memo = worker.memo || "";
-  const detailParts = [];
-  detailParts.push(`就業回数: ${employmentCount}回`);
-  if (memo) {
-    detailParts.push(`備考: ${memo}`);
-  }
-  detail.textContent = detailParts.join(" / ");
-
-  const right = document.createElement("div");
-  right.appendChild(title);
-  right.appendChild(hint);
-  right.appendChild(detail);
+  const { left, right } = createSkillColumns(
+    skillSettings,
+    normalizeSkillLevels(worker.skillLevels)
+  );
+  const body = buildCardBody(worker, readOnly);
 
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";
@@ -101,11 +118,11 @@ function card(worker, readOnly, onEditWorker) {
     }
   });
 
-  el.appendChild(av);
+  el.appendChild(left);
+  el.appendChild(body);
   el.appendChild(right);
   el.appendChild(settingsBtn);
 
-  // DnD
   if (!readOnly) {
     el.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("type", "pool");

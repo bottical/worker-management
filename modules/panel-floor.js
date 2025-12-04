@@ -3,10 +3,12 @@ import {
   createAssignment,
   closeAssignment,
   updateAssignmentArea,
-  DEFAULT_AREAS
+  DEFAULT_AREAS,
+  DEFAULT_SKILL_SETTINGS
 } from "../api/firebase.js";
 import { fmtRange, toast } from "../core/ui.js";
 import { getContrastTextColor } from "../core/colors.js";
+import { createSkillColumns, normalizeSkillLevels } from "./skill-layout.js";
 
 /**
  * フロア（ゾーン）側の描画と、在籍の反映を担う
@@ -28,6 +30,7 @@ export function makeFloor(
   let _readOnly = false;
   let currentAssignments = [];
   let currentSite = { ...site };
+  let _skillSettings = options.skillSettings || DEFAULT_SKILL_SETTINGS;
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
   const { onEditWorker, getLeaderFlag } = options;
@@ -50,36 +53,19 @@ export function makeFloor(
         ? w.employmentCount
         : Number(w.employmentCount || 0),
       memo: w.memo || "",
-      isLeader: Boolean(w.isLeader)
+      isLeader: Boolean(w.isLeader),
+      skillLevels: normalizeSkillLevels(w.skillLevels)
     };
   }
 
-  function applyAvatarStyle(avatarEl, color) {
-    if (!avatarEl) return;
-    if (color) {
-      avatarEl.style.background = color;
-      avatarEl.style.color = getContrastTextColor(color);
-    } else {
-      avatarEl.style.background = "";
-      avatarEl.style.color = "";
-    }
-  }
-
-  function applyLeaderMark(cardEl, isLeader) {
+  function applyAccent(cardEl, color) {
     if (!cardEl) return;
-    const title = cardEl.querySelector(".mono");
-    if (!title) return;
-    let mark = title.querySelector(".leader-mark");
-    if (isLeader) {
-      if (!mark) {
-        mark = document.createElement("span");
-        mark.className = "leader-mark";
-        mark.textContent = "★";
-        title.appendChild(mark);
-      }
-      mark.title = "リーダー";
-    } else if (mark) {
-      mark.remove();
+    if (color) {
+      cardEl.style.setProperty("--card-accent", color);
+      cardEl.style.setProperty("--card-accent-text", getContrastTextColor(color));
+    } else {
+      cardEl.style.removeProperty("--card-accent");
+      cardEl.style.removeProperty("--card-accent-text");
     }
   }
 
@@ -98,44 +84,94 @@ export function makeFloor(
     return area.label || `エリア${area.id}`;
   }
 
-  function slotHtml(info, workerId, areaId, assignmentId, floorId) {
-    const meta = fmtRange(info.start, info.end);
+  function buildLocationLabel(areaId, floorId) {
     const areaLabel = getAreaLabel(areaId, floorId);
     const floorLabel = getFloorLabel(floorId);
-    const locationLabel = floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
-    const detailLines = [];
-    if (typeof info.employmentCount === "number") {
-      detailLines.push(`就業回数: ${info.employmentCount}回`);
+    return floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
+  }
+
+  function buildCardBody(info, areaId, floorId) {
+    const body = document.createElement("div");
+    body.className = "card-body";
+
+    const header = document.createElement("div");
+    header.className = "card-header";
+
+    if (info.isLeader) {
+      const leader = document.createElement("span");
+      leader.className = "leader-mark";
+      leader.title = "リーダー";
+      leader.textContent = "★";
+      header.appendChild(leader);
     }
-    if (info.memo) {
-      detailLines.push(`備考: ${info.memo}`);
-    }
-    const leaderHtml = info.isLeader
-      ? '<span class="leader-mark" title="リーダー">★</span>'
-      : "";
-    const detailHtml = detailLines.length
-      ? detailLines.map((line) => `<div class="hint">${line}</div>`).join("")
-      : "";
-    return `
-      <div class="card" draggable="true"
-           data-type="placed"
-           data-assignment-id="${assignmentId}"
-           data-worker-id="${workerId}"
-           data-area-id="${areaId}"
-           data-floor-id="${floorId || ""}">
-        <button class="card-action" data-action="edit-worker" title="作業員情報を編集">⚙</button>
-        <div class="avatar">
-          ${info.name.charAt(0)}
-        </div>
-        <div>
-          <div class="mono">${info.name}${meta ? ` ${meta}` : ""}${leaderHtml}</div>
-          <div class="hint">配置：${locationLabel}${
+
+    const name = document.createElement("div");
+    name.className = "card-name";
+    name.textContent = info.name;
+    header.appendChild(name);
+
+    const employment = document.createElement("div");
+    employment.className = "employment-count";
+    employment.innerHTML = `<span class="count">${Number(
+      info.employmentCount || 0
+    )}</span><span class="unit">回</span>`;
+    header.appendChild(employment);
+
+    const time = document.createElement("div");
+    time.className = "card-time";
+    const meta = fmtRange(info.start, info.end);
+    time.textContent = meta || "時間未設定";
+
+    const location = document.createElement("div");
+    location.className = "card-location hint";
+    const locationLabel = buildLocationLabel(areaId, floorId);
+    location.textContent = `配置：${locationLabel}${
       _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
-    }</div>
-          ${detailHtml}
-        </div>
-      </div>
-    `;
+    }`;
+
+    const memo = document.createElement("div");
+    memo.className = "card-memo hint";
+    memo.textContent = info.memo ? `備考: ${info.memo}` : "備考: -";
+
+    body.appendChild(header);
+    body.appendChild(time);
+    body.appendChild(location);
+    body.appendChild(memo);
+
+    return body;
+  }
+
+  function createPlacedCard(info, workerId, areaId, assignmentId, floorId) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.type = "placed";
+    card.dataset.assignmentId = assignmentId;
+    card.dataset.workerId = workerId;
+    card.dataset.areaId = areaId;
+    card.dataset.floorId = floorId || "";
+    card.setAttribute("draggable", "true");
+
+    applyAccent(card, info.panelColor);
+
+    const { left, right } = createSkillColumns(
+      _skillSettings,
+      normalizeSkillLevels(info.skillLevels)
+    );
+    const body = buildCardBody(info, areaId, floorId);
+
+    const settingsBtn = document.createElement("button");
+    settingsBtn.type = "button";
+    settingsBtn.className = "card-action";
+    settingsBtn.dataset.action = "edit-worker";
+    settingsBtn.title = "作業員情報を編集";
+    settingsBtn.textContent = "⚙";
+
+    card.appendChild(left);
+    card.appendChild(body);
+    card.appendChild(right);
+    card.appendChild(settingsBtn);
+
+    return card;
   }
 
   function notifyMissingContext() {
@@ -152,11 +188,8 @@ export function makeFloor(
     const slot = document.createElement("div");
     slot.className = "slot";
     const info = getWorkerInfo(workerId);
-    slot.innerHTML = slotHtml(info, workerId, areaId, assignmentId, floorId);
-    const card = slot.querySelector(".card");
+    const card = createPlacedCard(info, workerId, areaId, assignmentId, floorId);
     if (!card) return;
-    const avatar = card.querySelector(".avatar");
-    applyAvatarStyle(avatar, info.panelColor);
     const settingsBtn = card.querySelector('[data-action="edit-worker"]');
     if (settingsBtn) {
       settingsBtn.addEventListener("click", (e) => {
@@ -208,6 +241,7 @@ export function makeFloor(
         handleActionError("在籍のOUT処理に失敗しました", err);
       }
     });
+    slot.appendChild(card);
     dropEl.appendChild(slot);
   }
 
@@ -352,34 +386,7 @@ export function makeFloor(
   // 外部（Dashboard）から呼ばれる：workerMapを差し替え→色・時間・表示を更新
   function setWorkerMap(map) {
     _workerMap = new Map(map || []);
-    // 既存スロットの見た目を更新
-    mount.querySelectorAll(".slot .card").forEach((card) => {
-      const workerId = card.dataset.workerId;
-      const areaId = card.dataset.areaId;
-      const info = getWorkerInfo(workerId);
-      const av = card.querySelector(".avatar");
-      if (av) {
-        av.textContent = info.name.charAt(0);
-        applyAvatarStyle(av, info.panelColor);
-      }
-      const title = card.querySelector(".mono");
-      if (title) {
-        const meta = fmtRange(info.start, info.end);
-        title.textContent = `${info.name}${meta ? ` ${meta}` : ""}`;
-      }
-      const hint = card.querySelector(".hint");
-      if (hint) {
-        const floorId = card.dataset.floorId || "";
-        const areaLabel = getAreaLabel(areaId, floorId);
-        const floorLabel = getFloorLabel(floorId);
-        const label = floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
-        hint.textContent = `配置：${label}${
-          _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
-        }`;
-      }
-      applyLeaderMark(card, info.isLeader);
-      toggleCardMode(card);
-    });
+    renderAssignments();
   }
 
   function toggleCardMode(card) {
@@ -406,6 +413,11 @@ export function makeFloor(
 
   function setSite(nextSite = {}) {
     currentSite = { ...currentSite, ...nextSite };
+  }
+
+  function setSkillSettings(settings = DEFAULT_SKILL_SETTINGS) {
+    _skillSettings = settings || DEFAULT_SKILL_SETTINGS;
+    renderAssignments();
   }
 
   function renderZones() {
@@ -499,7 +511,14 @@ export function makeFloor(
   }
 
   // グローバルフック（既存実装がこれを呼ぶ）
-  const api = { updateFromAssignments, setWorkerMap, setAreas, setReadOnly, setSite };
+  const api = {
+    updateFromAssignments,
+    setWorkerMap,
+    setAreas,
+    setReadOnly,
+    setSite,
+    setSkillSettings
+  };
   window.__floorRender = api;
 
   // アンマウント

@@ -16,12 +16,25 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .right{}
 .hint{font-size:12px;color:var(--muted)}
 .cards{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
-.card{position:relative;display:flex;align-items:center;gap:10px;padding:10px;border:1px dashed var(--border);border-radius:12px;background:#fff;cursor:grab}
+.card{position:relative;display:grid;grid-template-columns:56px 1fr 56px;align-items:stretch;gap:12px;padding:12px;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04)}
 .card.readonly{cursor:default;opacity:.85}
 .card.dragging{opacity:.6}
 .card-action{position:absolute;top:6px;right:6px;border:1px solid var(--border);background:#f8fafc;color:var(--muted);border-radius:8px;padding:4px 6px;font-size:12px;cursor:pointer;line-height:1}
 .card-action:hover{background:#e2e8f0;color:var(--ink)}
-.avatar{width:28px;height:28px;border-radius:8px;background:var(--chip);display:grid;place-items:center;font-weight:700}
+.card-body{display:flex;flex-direction:column;gap:8px}
+.card-header{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.card-name{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.employment-count{display:flex;align-items:flex-end;gap:3px;font-size:12px;color:var(--muted)}
+.employment-count .count{font-size:18px;font-weight:700;color:var(--ink)}
+.card-time{align-self:center;padding:6px 12px;border-radius:10px;background:#fef3c7;color:#92400e;border:1px solid var(--border);font-weight:700;text-align:center}
+.card-location{color:var(--muted)}
+.card-memo{color:var(--muted);word-break:break-all}
+.skill-column{display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;min-width:48px}
+.skill-indicator{width:36px;height:46px;border-radius:12px;border:1px dashed var(--border);display:flex;align-items:flex-end;justify-content:center;padding-bottom:6px;position:relative;background:transparent;transition:.15s}
+.skill-indicator[data-level="mid"],.skill-indicator[data-level="high"]{background:var(--skill-color);border-color:transparent;color:var(--card-accent-text,var(--ink))}
+.skill-indicator[data-level="high"]::before{content:"";position:absolute;top:-6px;width:8px;height:8px;border-radius:50%;background:#0f172a;box-shadow:0 0 0 2px #fff}
+.skill-label{font-size:10px;line-height:1;text-align:center;color:var(--muted);padding:2px 4px;white-space:nowrap}
+.skill-indicator[data-level="mid"] .skill-label,.skill-indicator[data-level="high"] .skill-label{color:var(--card-accent-text,var(--ink))}
 .leader-mark{color:#ef4444;margin-left:6px;font-size:14px}
 .zones{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;min-height:300px}
 .zone{background:var(--area);border:2px solid #c7d2fe;border-radius:16px;min-height:220px;padding:10px;position:relative;transition:.2s}

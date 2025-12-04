@@ -1,0 +1,75 @@
+// modules/skill-layout.js
+import { DEFAULT_SKILL_SETTINGS } from "../api/firebase.js";
+
+const SKILL_COLORS = ["#60a5fa", "#facc15", "#22c55e", "#f472b6", "#a855f7", "#f97316"];
+
+export function normalizeSkillLevels(levels = {}) {
+  if (!levels || typeof levels !== "object") return {};
+  const result = {};
+  Object.entries(levels).forEach(([key, value]) => {
+    if (typeof value === "string" && value.trim()) {
+      result[key] = value.trim();
+    }
+  });
+  return result;
+}
+
+function getLevelOrder(skillSettings = DEFAULT_SKILL_SETTINGS) {
+  const order = new Map();
+  (skillSettings?.levels || DEFAULT_SKILL_SETTINGS.levels).forEach((level, idx) => {
+    if (!level?.id) return;
+    order.set(level.id, idx);
+  });
+  return order;
+}
+
+function getNormalizedSkills(skillSettings = DEFAULT_SKILL_SETTINGS) {
+  const skills = Array.isArray(skillSettings?.skills)
+    ? skillSettings.skills
+    : DEFAULT_SKILL_SETTINGS.skills;
+  if (!skills.length) return DEFAULT_SKILL_SETTINGS.skills;
+  return skills.map((skill, idx) => ({
+    id: skill?.id || `skill${idx + 1}`,
+    name: skill?.name || `スキル${idx + 1}`
+  }));
+}
+
+function createSkillIndicator(skill, levelId, levelOrder, idx) {
+  const indicator = document.createElement("div");
+  indicator.className = "skill-indicator";
+  indicator.dataset.skillId = skill.id;
+  indicator.style.setProperty("--skill-color", SKILL_COLORS[idx % SKILL_COLORS.length]);
+
+  const rank = levelOrder.get(levelId);
+  if (rank === 1) {
+    indicator.dataset.level = "mid";
+  } else if (typeof rank === "number" && rank >= 2) {
+    indicator.dataset.level = "high";
+  } else {
+    indicator.dataset.level = "none";
+  }
+
+  const label = document.createElement("span");
+  label.className = "skill-label";
+  label.textContent = skill.name;
+  indicator.appendChild(label);
+  return indicator;
+}
+
+export function createSkillColumns(skillSettings = DEFAULT_SKILL_SETTINGS, skillLevels = {}) {
+  const skills = getNormalizedSkills(skillSettings);
+  const levelOrder = getLevelOrder(skillSettings);
+  const left = document.createElement("div");
+  left.className = "skill-column left";
+  const right = document.createElement("div");
+  right.className = "skill-column right";
+
+  const midpoint = Math.ceil(skills.length / 2) || 1;
+  skills.forEach((skill, idx) => {
+    const target = idx < midpoint ? left : right;
+    const levelId = skillLevels?.[skill.id] || "";
+    target.appendChild(createSkillIndicator(skill, levelId, levelOrder, idx));
+  });
+
+  return { left, right };
+}

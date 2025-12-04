@@ -11,11 +11,14 @@ import {
   getDailyRoster,
   DEFAULT_AREAS,
   DEFAULT_FLOORS,
+  DEFAULT_SKILL_SETTINGS,
   upsertWorker,
   saveDailyRoster,
-  updateAssignmentLeader
+  updateAssignmentLeader,
+  subscribeSkillSettings
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
+import { normalizeSkillLevels } from "../modules/skill-layout.js";
 
 const ALL_FLOOR_VALUE = "__all__";
 
@@ -23,6 +26,7 @@ export function renderDashboard(mount) {
   const todayStr = new Date().toISOString().slice(0, 10);
   let selectedDate = state.assignmentDate || todayStr;
   let isReadOnly = selectedDate !== todayStr;
+  let skillSettings = DEFAULT_SKILL_SETTINGS;
   if (!state.site?.userId || !state.site?.siteId) {
     const panel = document.createElement("div");
     panel.className = "panel";
@@ -70,11 +74,13 @@ export function renderDashboard(mount) {
         defaultEndTime: "",
         employmentCount: 0,
         memo: "",
-        panel: { color: "" }
+        panel: { color: "" },
+        skillLevels: {}
       };
     }
     const workerId = row.workerId || "";
     if (!workerId) return null;
+    const skillLevels = normalizeSkillLevels(row.skillLevels || row.skill_levels);
     return {
       workerId,
       name: row.name || workerId,
@@ -82,7 +88,8 @@ export function renderDashboard(mount) {
       defaultEndTime: row.defaultEndTime || "",
       employmentCount: Number(row.employmentCount || 0),
       memo: row.memo || "",
-      panel: { color: row.panel?.color || row.panelColor || "" }
+      panel: { color: row.panel?.color || row.panelColor || "" },
+      skillLevels
     };
   }
 
@@ -117,7 +124,8 @@ export function renderDashboard(mount) {
         defaultEndTime: w.defaultEndTime || "",
         panelColor: w.panel?.color || "",
         employmentCount: Number(w.employmentCount || 0),
-        memo: w.memo || ""
+        memo: w.memo || "",
+        skillLevels: normalizeSkillLevels(w.skillLevels)
       }
     ])
   );
@@ -182,7 +190,8 @@ export function renderDashboard(mount) {
   // フロア初期化
   const floorApi = makeFloor(floorEl, state.site, workerMap, areaList, {
     onEditWorker: openWorkerEditor,
-    getLeaderFlag
+    getLeaderFlag,
+    skillSettings
   });
   makePool(poolEl, state.site);
 
@@ -202,23 +211,25 @@ export function renderDashboard(mount) {
         map.set(entry.workerId, {
           name: entry.name || entry.workerId,
           defaultStartTime: "",
-          defaultEndTime: "",
-          panelColor: "",
-          employmentCount: 0,
-          memo: "",
-          isLeader: Boolean(entry.isLeader),
-          floorId: entry.floorId || ""
-        });
-      } else if (entry.isLeader) {
-        const current = map.get(entry.workerId) || {};
-        map.set(entry.workerId, {
-          ...current,
-          isLeader: true,
-          floorId: entry.floorId || current.floorId || ""
-        });
-      }
-    });
-    latestAssignmentsAll.forEach((row) => {
+        defaultEndTime: "",
+        panelColor: "",
+        employmentCount: 0,
+        memo: "",
+        isLeader: Boolean(entry.isLeader),
+        floorId: entry.floorId || "",
+        skillLevels: normalizeSkillLevels(entry.skillLevels)
+      });
+    } else if (entry.isLeader) {
+      const current = map.get(entry.workerId) || {};
+      map.set(entry.workerId, {
+        ...current,
+        isLeader: true,
+        floorId: entry.floorId || current.floorId || "",
+        skillLevels: normalizeSkillLevels(current.skillLevels)
+      });
+    }
+  });
+  latestAssignmentsAll.forEach((row) => {
       if (row?.isLeader) {
         leaderSet.add(row.workerId);
       }
@@ -227,17 +238,18 @@ export function renderDashboard(mount) {
         map.set(row.workerId, {
           name: row.workerId,
           defaultStartTime: "",
-          defaultEndTime: "",
-          panelColor: "",
-          employmentCount: 0,
-          memo: "",
-          isLeader: Boolean(row.isLeader)
-        });
-      } else if (row.isLeader) {
-        const current = map.get(row.workerId) || {};
-        map.set(row.workerId, { ...current, isLeader: true });
-      }
-    });
+        defaultEndTime: "",
+        panelColor: "",
+        employmentCount: 0,
+        memo: "",
+        isLeader: Boolean(row.isLeader),
+        skillLevels: normalizeSkillLevels(row.skillLevels)
+      });
+    } else if (row.isLeader) {
+      const current = map.get(row.workerId) || {};
+      map.set(row.workerId, { ...current, isLeader: true });
+    }
+  });
     leaderSet.forEach((workerId) => {
       if (!map.has(workerId)) return;
       const current = map.get(workerId) || {};
@@ -259,7 +271,8 @@ export function renderDashboard(mount) {
           employmentCount: Number(master.employmentCount || 0),
           memo: master.memo || "",
           panel: { color: master.panel?.color || "" },
-          isLeader: Boolean(entry.isLeader)
+          isLeader: Boolean(entry.isLeader),
+          skillLevels: normalizeSkillLevels(master.skillLevels)
         };
       }
       return {
@@ -270,7 +283,8 @@ export function renderDashboard(mount) {
         employmentCount: 0,
         memo: "",
         panel: { color: "" },
-        isLeader: Boolean(entry.isLeader)
+        isLeader: Boolean(entry.isLeader),
+        skillLevels: {}
       };
     });
   }
@@ -327,7 +341,8 @@ export function renderDashboard(mount) {
     const notAssigned = rosterWorkers.filter((w) => !assignedAll.has(w.workerId));
     drawPool(poolEl, notAssigned, {
       readOnly: isReadOnly,
-      onEditWorker: openWorkerEditor
+      onEditWorker: openWorkerEditor,
+      skillSettings
     });
     countEl.textContent = String(notAssigned.length);
     updateViewMode();
@@ -344,23 +359,36 @@ export function renderDashboard(mount) {
       masterWorkers = active
         .map(toWorkerMaster)
         .filter((w) => w && w.workerId);
-    masterWorkerLookup = new Map(
-      masterWorkers.map((w) => [w.workerId, { ...w }])
-    );
-    masterWorkerMap = new Map(
-      masterWorkers.map((w) => [
-        w.workerId,
-        {
-          name: w.name,
-          defaultStartTime: w.defaultStartTime,
-          defaultEndTime: w.defaultEndTime,
-          panelColor: w.panel?.color || "",
-          employmentCount: Number(w.employmentCount || 0),
-          memo: w.memo || ""
-        }
-      ])
-    );
-    reconcile();
+      masterWorkerLookup = new Map(
+        masterWorkers.map((w) => [w.workerId, { ...w }])
+      );
+      masterWorkerMap = new Map(
+        masterWorkers.map((w) => [
+          w.workerId,
+          {
+            name: w.name,
+            defaultStartTime: w.defaultStartTime,
+            defaultEndTime: w.defaultEndTime,
+            panelColor: w.panel?.color || "",
+            employmentCount: Number(w.employmentCount || 0),
+            memo: w.memo || "",
+            skillLevels: normalizeSkillLevels(w.skillLevels)
+          }
+        ])
+      );
+      reconcile();
+    }
+  );
+
+  const unsubSkillSettings = subscribeSkillSettings(
+    {
+      userId: state.site.userId,
+      siteId: state.site.siteId
+    },
+    (settings) => {
+      skillSettings = settings || { ...DEFAULT_SKILL_SETTINGS };
+      floorApi.setSkillSettings(skillSettings);
+      reconcile();
     }
   );
 
@@ -860,6 +888,11 @@ export function renderDashboard(mount) {
         unsubscribeAllAreas();
       } catch (err) {
         console.warn("unsubAreas failed", err);
+      }
+      try {
+        unsubSkillSettings();
+      } catch (err) {
+        console.warn("unsubSkillSettings failed", err);
       }
       try {
         unsubFloors();

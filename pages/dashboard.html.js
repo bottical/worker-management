@@ -11,7 +11,9 @@ import {
   getDailyRoster,
   DEFAULT_AREAS,
   DEFAULT_FLOORS,
-  upsertWorker
+  upsertWorker,
+  saveDailyRoster,
+  updateAssignmentLeader
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
@@ -87,7 +89,7 @@ export function renderDashboard(mount) {
   function toRosterEntry(row, floorId = "") {
     if (!row) return null;
     if (typeof row === "string") {
-      return { workerId: row, name: row, areaId: "", floorId };
+      return { workerId: row, name: row, areaId: "", floorId, isLeader: false };
     }
     const workerId = row.workerId || "";
     if (!workerId) return null;
@@ -95,7 +97,8 @@ export function renderDashboard(mount) {
       workerId,
       name: row.name || workerId,
       areaId: row.areaId || "",
-      floorId: row.floorId || floorId || ""
+      floorId: row.floorId || floorId || "",
+      isLeader: Boolean(row.isLeader)
     };
   }
 
@@ -164,9 +167,22 @@ export function renderDashboard(mount) {
     workerEditor.open(getWorkerForEditing(workerId));
   }
 
+  function getLeaderFlag(workerId) {
+    if (!workerId) return false;
+    const assignment = latestAssignmentsAll.find(
+      (row) => row.workerId === workerId && row._source !== "roster"
+    );
+    if (typeof assignment?.isLeader === "boolean") {
+      return assignment.isLeader;
+    }
+    const roster = rosterEntries.get(workerId);
+    return Boolean(roster?.isLeader);
+  }
+
   // フロア初期化
   const floorApi = makeFloor(floorEl, state.site, workerMap, areaList, {
-    onEditWorker: openWorkerEditor
+    onEditWorker: openWorkerEditor,
+    getLeaderFlag
   });
   makePool(poolEl, state.site);
 
@@ -177,7 +193,11 @@ export function renderDashboard(mount) {
 
   function buildWorkerMap() {
     const map = new Map(masterWorkerMap);
+    const leaderSet = new Set();
     rosterEntries.forEach((entry) => {
+      if (entry.isLeader) {
+        leaderSet.add(entry.workerId);
+      }
       if (!map.has(entry.workerId)) {
         map.set(entry.workerId, {
           name: entry.name || entry.workerId,
@@ -185,20 +205,43 @@ export function renderDashboard(mount) {
           defaultEndTime: "",
           panelColor: "",
           employmentCount: 0,
-          memo: ""
+          memo: "",
+          isLeader: Boolean(entry.isLeader),
+          floorId: entry.floorId || ""
+        });
+      } else if (entry.isLeader) {
+        const current = map.get(entry.workerId) || {};
+        map.set(entry.workerId, {
+          ...current,
+          isLeader: true,
+          floorId: entry.floorId || current.floorId || ""
         });
       }
     });
     latestAssignmentsAll.forEach((row) => {
-      if (!row?.workerId || map.has(row.workerId)) return;
-      map.set(row.workerId, {
-        name: row.workerId,
-        defaultStartTime: "",
-        defaultEndTime: "",
-        panelColor: "",
-        employmentCount: 0,
-        memo: ""
-      });
+      if (row?.isLeader) {
+        leaderSet.add(row.workerId);
+      }
+      if (!row?.workerId) return;
+      if (!map.has(row.workerId)) {
+        map.set(row.workerId, {
+          name: row.workerId,
+          defaultStartTime: "",
+          defaultEndTime: "",
+          panelColor: "",
+          employmentCount: 0,
+          memo: "",
+          isLeader: Boolean(row.isLeader)
+        });
+      } else if (row.isLeader) {
+        const current = map.get(row.workerId) || {};
+        map.set(row.workerId, { ...current, isLeader: true });
+      }
+    });
+    leaderSet.forEach((workerId) => {
+      if (!map.has(workerId)) return;
+      const current = map.get(workerId) || {};
+      map.set(workerId, { ...current, isLeader: true });
     });
     return map;
   }
@@ -215,7 +258,8 @@ export function renderDashboard(mount) {
           defaultEndTime: master.defaultEndTime,
           employmentCount: Number(master.employmentCount || 0),
           memo: master.memo || "",
-          panel: { color: master.panel?.color || "" }
+          panel: { color: master.panel?.color || "" },
+          isLeader: Boolean(entry.isLeader)
         };
       }
       return {
@@ -225,7 +269,8 @@ export function renderDashboard(mount) {
         defaultEndTime: "",
         employmentCount: 0,
         memo: "",
-        panel: { color: "" }
+        panel: { color: "" },
+        isLeader: Boolean(entry.isLeader)
       };
     });
   }
@@ -267,7 +312,8 @@ export function renderDashboard(mount) {
           workerId: entry.workerId,
           areaId: entry.areaId,
           floorId: targetFloorId,
-          _source: "roster"
+          _source: "roster",
+          isLeader: Boolean(entry.isLeader)
         });
       });
       if (pseudoAssignments.length) {
@@ -655,6 +701,7 @@ export function renderDashboard(mount) {
           <label>終了時刻<input type="time" name="defaultEndTime"></label>
           <label>就業回数<input type="number" name="employmentCount" min="0"></label>
           <label>表示色<input name="panelColor" placeholder="#2563eb"></label>
+          <label class="checkbox"><input type="checkbox" name="isLeader">リーダーとしてマーク（当日）</label>
           <label>備考<textarea name="memo" placeholder="メモや特記事項"></textarea></label>
           <div class="actions">
             <button type="button" class="button ghost" data-cancel>閉じる</button>
@@ -674,6 +721,7 @@ export function renderDashboard(mount) {
     const countInput = overlay.querySelector('input[name="employmentCount"]');
     const colorInput = overlay.querySelector('input[name="panelColor"]');
     const memoInput = overlay.querySelector('textarea[name="memo"]');
+    const leaderInput = overlay.querySelector('input[name="isLeader"]');
     let currentWorkerId = "";
 
     function close() {
@@ -690,8 +738,61 @@ export function renderDashboard(mount) {
       countInput.value = Number(worker.employmentCount || 0);
       colorInput.value = worker.panelColor || "";
       memoInput.value = worker.memo || "";
+      if (leaderInput) {
+        leaderInput.checked = Boolean(getLeaderFlag(worker.workerId));
+      }
       overlay.classList.add("show");
       nameInput.focus();
+    }
+
+    function getRosterFloorId(assignmentFloorId = "") {
+      if (assignmentFloorId) return assignmentFloorId;
+      const roster = rosterEntries.get(currentWorkerId);
+      if (roster?.floorId) return roster.floorId;
+      const currentFloor =
+        state.site.floorId && state.site.floorId !== ALL_FLOOR_VALUE
+          ? state.site.floorId
+          : "";
+      if (currentFloor) return currentFloor;
+      return floorList?.[0]?.id || "";
+    }
+
+    async function persistLeaderState(workerName, isLeaderFlag) {
+      const assignment = latestAssignmentsAll.find(
+        (row) => row.workerId === currentWorkerId && row._source !== "roster"
+      );
+      const resolvedFloorId = getRosterFloorId(assignment?.floorId || "");
+      const existingRoster = rosterEntries.get(currentWorkerId) || {};
+      rosterEntries.set(currentWorkerId, {
+        workerId: currentWorkerId,
+        name: workerName || currentWorkerId,
+        areaId: existingRoster.areaId || assignment?.areaId || "",
+        floorId: resolvedFloorId,
+        isLeader: isLeaderFlag
+      });
+      const rosterByFloor = Array.from(rosterEntries.values()).filter(
+        (entry) => (entry.floorId || "") === resolvedFloorId
+      );
+      await saveDailyRoster({
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        floorId: resolvedFloorId,
+        date: selectedDate,
+        workers: rosterByFloor
+      });
+      if (assignment?.id) {
+        await updateAssignmentLeader({
+          userId: state.site.userId,
+          siteId: state.site.siteId,
+          assignmentId: assignment.id,
+          isLeader: isLeaderFlag
+        });
+        latestAssignmentsAll = latestAssignmentsAll.map((row) =>
+          row.workerId === currentWorkerId && row._source !== "roster"
+            ? { ...row, isLeader: isLeaderFlag }
+            : row
+        );
+      }
     }
 
     overlay.addEventListener("click", (e) => {
@@ -720,6 +821,7 @@ export function renderDashboard(mount) {
         panel: { color: colorInput.value.trim() || "" },
         active: true
       };
+      const isLeaderToday = Boolean(leaderInput?.checked);
       try {
         if (saveBtn) saveBtn.disabled = true;
         if (saveBtn) saveBtn.textContent = "保存中...";
@@ -728,6 +830,8 @@ export function renderDashboard(mount) {
           siteId: state.site.siteId,
           ...payload
         });
+        await persistLeaderState(payload.name, isLeaderToday);
+        reconcile();
         toast(`保存しました：${currentWorkerId}`);
         close();
       } catch (err) {

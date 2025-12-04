@@ -30,7 +30,7 @@ export function makeFloor(
   let currentSite = { ...site };
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
-  const { onEditWorker } = options;
+  const { onEditWorker, getLeaderFlag } = options;
 
   mount.innerHTML = "";
   const zonesEl = document.createElement("div");
@@ -49,7 +49,8 @@ export function makeFloor(
       employmentCount: typeof w.employmentCount === "number"
         ? w.employmentCount
         : Number(w.employmentCount || 0),
-      memo: w.memo || ""
+      memo: w.memo || "",
+      isLeader: Boolean(w.isLeader)
     };
   }
 
@@ -61,6 +62,24 @@ export function makeFloor(
     } else {
       avatarEl.style.background = "";
       avatarEl.style.color = "";
+    }
+  }
+
+  function applyLeaderMark(cardEl, isLeader) {
+    if (!cardEl) return;
+    const title = cardEl.querySelector(".mono");
+    if (!title) return;
+    let mark = title.querySelector(".leader-mark");
+    if (isLeader) {
+      if (!mark) {
+        mark = document.createElement("span");
+        mark.className = "leader-mark";
+        mark.textContent = "★";
+        title.appendChild(mark);
+      }
+      mark.title = "リーダー";
+    } else if (mark) {
+      mark.remove();
     }
   }
 
@@ -91,6 +110,9 @@ export function makeFloor(
     if (info.memo) {
       detailLines.push(`備考: ${info.memo}`);
     }
+    const leaderHtml = info.isLeader
+      ? '<span class="leader-mark" title="リーダー">★</span>'
+      : "";
     const detailHtml = detailLines.length
       ? detailLines.map((line) => `<div class="hint">${line}</div>`).join("")
       : "";
@@ -106,7 +128,7 @@ export function makeFloor(
           ${info.name.charAt(0)}
         </div>
         <div>
-          <div class="mono">${info.name}${meta ? ` ${meta}` : ""}</div>
+          <div class="mono">${info.name}${meta ? ` ${meta}` : ""}${leaderHtml}</div>
           <div class="hint">配置：${locationLabel}${
       _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
     }</div>
@@ -224,10 +246,13 @@ export function makeFloor(
         }
         // 未配置 → IN
         const workerId = e.dataTransfer.getData("workerId");
+        const isLeader =
+          typeof getLeaderFlag === "function" ? Boolean(getLeaderFlag(workerId)) : false;
         console.info("[Floor] creating assignment", {
           workerId,
           areaId,
-          floorId: dropFloorId
+          floorId: dropFloorId,
+          isLeader
         });
         try {
           await createAssignment({
@@ -235,7 +260,8 @@ export function makeFloor(
             siteId: currentSite.siteId,
             floorId: dropFloorId,
             areaId,
-            workerId
+            workerId,
+            isLeader
           });
         } catch (err) {
           handleActionError("配置の登録に失敗しました", err);
@@ -351,6 +377,7 @@ export function makeFloor(
           _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
         }`;
       }
+      applyLeaderMark(card, info.isLeader);
       toggleCardMode(card);
     });
   }

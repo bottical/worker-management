@@ -22,6 +22,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card-action{position:absolute;top:6px;right:6px;border:1px solid var(--border);background:#f8fafc;color:var(--muted);border-radius:8px;padding:4px 6px;font-size:12px;cursor:pointer;line-height:1}
 .card-action:hover{background:#e2e8f0;color:var(--ink)}
 .avatar{width:28px;height:28px;border-radius:8px;background:var(--chip);display:grid;place-items:center;font-weight:700}
+.leader-mark{color:#ef4444;margin-left:6px;font-size:14px}
 .zones{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;min-height:300px}
 .zone{background:var(--area);border:2px solid #c7d2fe;border-radius:16px;min-height:220px;padding:10px;position:relative;transition:.2s}
 .zone h3{margin:0 0 8px 0;font-size:13px;color:var(--muted)}

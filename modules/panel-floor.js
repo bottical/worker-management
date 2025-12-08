@@ -75,21 +75,6 @@ export function makeFloor(
     return area?.floorLabel || floorId;
   }
 
-  function getAreaLabel(areaId, floorId = "") {
-    const area = _areas.find(
-      (a) => a.id === areaId && (!floorId || a.floorId === floorId)
-    );
-    if (!areaId || areaId === FALLBACK_AREA_ID) return FALLBACK_AREA_LABEL;
-    if (!area) return `エリア${areaId}`;
-    return area.label || `エリア${area.id}`;
-  }
-
-  function buildLocationLabel(areaId, floorId) {
-    const areaLabel = getAreaLabel(areaId, floorId);
-    const floorLabel = getFloorLabel(floorId);
-    return floorLabel ? `${floorLabel} / ${areaLabel}` : areaLabel;
-  }
-
   function buildCardBody(info, areaId, floorId) {
     const body = document.createElement("div");
     body.className = "card-body";
@@ -122,20 +107,12 @@ export function makeFloor(
     const meta = fmtRange(info.start, info.end);
     time.textContent = meta || "時間未設定";
 
-    const location = document.createElement("div");
-    location.className = "card-location hint";
-    const locationLabel = buildLocationLabel(areaId, floorId);
-    location.textContent = `配置：${locationLabel}${
-      _readOnly ? "（閲覧）" : "（エリア外ドロップでOUT）"
-    }`;
-
     const memo = document.createElement("div");
     memo.className = "card-memo hint";
     memo.textContent = info.memo ? `備考: ${info.memo}` : "備考: -";
 
     body.appendChild(header);
     body.appendChild(time);
-    body.appendChild(location);
     body.appendChild(memo);
 
     return body;

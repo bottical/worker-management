@@ -110,10 +110,14 @@ export function makeFloor(
       info.employmentCount || 0
     )}</span><span class="unit">回</span>`;
 
+    const metaRow = document.createElement("div");
+    metaRow.className = "card-meta-row";
+    metaRow.appendChild(memo);
+    metaRow.appendChild(employment);
+
     body.appendChild(header);
     body.appendChild(time);
-    body.appendChild(memo);
-    body.appendChild(employment);
+    body.appendChild(metaRow);
 
     return body;
   }

@@ -57,13 +57,6 @@ function buildCardBody(worker, readOnly) {
   name.textContent = worker.name || worker.workerId || "?";
   header.appendChild(name);
 
-  const employment = document.createElement("div");
-  employment.className = "employment-count";
-  employment.innerHTML = `<span class="count">${Number(
-    worker.employmentCount || 0
-  )}</span><span class="unit">回</span>`;
-  header.appendChild(employment);
-
   const time = document.createElement("div");
   time.className = "card-time";
   const meta = fmtRange(worker.defaultStartTime, worker.defaultEndTime);
@@ -73,13 +66,24 @@ function buildCardBody(worker, readOnly) {
   memo.className = "card-memo hint";
   memo.textContent = worker.memo ? `備考: ${worker.memo}` : "備考: -";
 
+  const employment = document.createElement("div");
+  employment.className = "employment-count";
+  employment.innerHTML = `<span class="count">${Number(
+    worker.employmentCount || 0
+  )}</span><span class="unit">回</span>`;
+
+  const metaRow = document.createElement("div");
+  metaRow.className = "card-meta-row";
+  metaRow.appendChild(memo);
+  metaRow.appendChild(employment);
+
   const hint = document.createElement("div");
   hint.className = "hint";
   hint.textContent = readOnly ? "閲覧モード" : "ドラッグで配置（IN）";
 
   body.appendChild(header);
   body.appendChild(time);
-  body.appendChild(memo);
+  body.appendChild(metaRow);
   body.appendChild(hint);
 
   return body;

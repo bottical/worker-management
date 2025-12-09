@@ -95,13 +95,6 @@ export function makeFloor(
     name.textContent = info.name;
     header.appendChild(name);
 
-    const employment = document.createElement("div");
-    employment.className = "employment-count";
-    employment.innerHTML = `<span class="count">${Number(
-      info.employmentCount || 0
-    )}</span><span class="unit">回</span>`;
-    header.appendChild(employment);
-
     const time = document.createElement("div");
     time.className = "card-time";
     const meta = fmtRange(info.start, info.end);
@@ -111,9 +104,16 @@ export function makeFloor(
     memo.className = "card-memo hint";
     memo.textContent = info.memo ? `備考: ${info.memo}` : "備考: -";
 
+    const employment = document.createElement("div");
+    employment.className = "employment-count";
+    employment.innerHTML = `<span class="count">${Number(
+      info.employmentCount || 0
+    )}</span><span class="unit">回</span>`;
+
     body.appendChild(header);
     body.appendChild(time);
     body.appendChild(memo);
+    body.appendChild(employment);
 
     return body;
   }

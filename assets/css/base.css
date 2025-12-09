@@ -23,9 +23,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card:hover .card-action{opacity:1;visibility:visible;pointer-events:auto}
 .card-action:hover{background:#e2e8f0;color:var(--ink)}
 .card-body{display:flex;flex-direction:column;gap:8px;padding:12px}
-.card-header{display:flex;align-items:center;gap:8px;justify-content:space-between}
-.card-name{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.employment-count{display:flex;align-items:flex-end;gap:3px;font-size:12px;color:var(--muted)}
+.card-header{display:flex;align-items:center;gap:8px;justify-content:center}
+.card-name{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;flex:0 1 auto}
+.employment-count{display:flex;align-items:flex-end;gap:3px;font-size:12px;color:var(--muted);justify-content:center}
 .employment-count .count{font-size:18px;font-weight:700;color:var(--ink)}
 .card-time{align-self:center;padding:6px 12px;border-radius:10px;background:#fef3c7;color:#92400e;border:1px solid var(--border);font-weight:700;text-align:center}
 .card-location{color:var(--muted)}
@@ -34,9 +34,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .skill-column-group.left{border-radius:12px 0 0 12px;overflow:hidden}
 .skill-column-group.right{border-radius:0 12px 12px 0;overflow:hidden}
 .skill-column{display:flex;flex-direction:column;gap:0;align-items:stretch;justify-content:stretch;height:100%}
-.skill-indicator{flex:1 1 0;min-height:32px;width:min(30px,100%);border:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:6px 4px;position:relative;background:transparent;transition:.15s;margin:0 auto}
+.skill-indicator{flex:1 1 0;min-height:32px;width:100%;border:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:0;position:relative;background:transparent;transition:.15s;margin:0}
 .skill-indicator[data-level="mid"],.skill-indicator[data-level="high"]{background:var(--skill-color);color:var(--card-accent-text,var(--ink))}
-.skill-indicator[data-level="high"]::before{content:"";position:absolute;top:8px;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;background:#0f172a;box-shadow:0 0 0 2px #fff}
+.skill-indicator[data-level="high"]::before{content:"";position:absolute;top:12px;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;background:#0f172a;box-shadow:0 0 0 2px #fff}
 .leader-mark{color:#ef4444;margin-left:6px;font-size:14px}
 .zones{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;min-height:300px}
 .zone{background:var(--area);border:2px solid #c7d2fe;border-radius:16px;min-height:220px;padding:10px;position:relative;transition:.2s}

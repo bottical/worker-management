@@ -2,7 +2,7 @@
 import {
   createAssignment,
   closeAssignment,
-  updateAssignmentArea,
+  updateAssignmentsOrder,
   DEFAULT_AREAS,
   DEFAULT_SKILL_SETTINGS
 } from "../api/firebase.js";
@@ -34,6 +34,77 @@ export function makeFloor(
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
   const { onEditWorker, getLeaderFlag } = options;
+
+  function timestampToMillis(ts) {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === "function") return ts.toMillis();
+    if (typeof ts === "number") return ts;
+    if (typeof ts.seconds === "number") return ts.seconds * 1000;
+    return 0;
+  }
+
+  function normalizeAreaId(areaId) {
+    return areaId || FALLBACK_AREA_ID;
+  }
+
+  function areaKey(areaId, floorId) {
+    return `${floorId || ""}__${normalizeAreaId(areaId)}`;
+  }
+
+  function sortAssignments(list = []) {
+    return list.slice().sort((a, b) => {
+      const orderDiff = (a.order ?? 0) - (b.order ?? 0);
+      if (orderDiff !== 0) return orderDiff;
+      return timestampToMillis(a.updatedAt) - timestampToMillis(b.updatedAt);
+    });
+  }
+
+  function groupAssignments(assignments = currentAssignments) {
+    const map = new Map();
+    (assignments || []).forEach((row) => {
+      const key = areaKey(row.areaId, row.floorId);
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key).push(row);
+    });
+    return map;
+  }
+
+  function getAreaAssignments(areaId, floorId) {
+    const key = areaKey(areaId, floorId);
+    const grouped = groupAssignments();
+    return sortAssignments(grouped.get(key) || []);
+  }
+
+  function findInsertIndex(dropEl, clientY) {
+    const slots = Array.from(dropEl?.querySelectorAll(".slot") || []);
+    if (!slots.length) return 0;
+    for (let i = 0; i < slots.length; i += 1) {
+      const rect = slots[i].getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        return i;
+      }
+    }
+    return slots.length;
+  }
+
+  async function persistOrders(updates, onErrorMessage = "並び順の更新に失敗しました") {
+    if (!Array.isArray(updates) || updates.length === 0) return;
+    if (!currentSite?.userId || !currentSite?.siteId) {
+      notifyMissingContext();
+      return;
+    }
+    try {
+      await updateAssignmentsOrder({
+        userId: currentSite.userId,
+        siteId: currentSite.siteId,
+        updates
+      });
+    } catch (err) {
+      handleActionError(onErrorMessage, err);
+    }
+  }
 
   mount.innerHTML = "";
   const zonesEl = document.createElement("div");
@@ -165,12 +236,13 @@ export function makeFloor(
     toast(kind, "error");
   }
 
-  function addSlot(dropEl, workerId, areaId, assignmentId, floorId) {
+  function addSlot(dropEl, workerId, areaId, assignmentId, floorId, order = 0) {
     const slot = document.createElement("div");
     slot.className = "slot";
     const info = getWorkerInfo(workerId);
     const card = createPlacedCard(info, workerId, areaId, assignmentId, floorId);
     if (!card) return;
+    card.dataset.order = String(order);
     const settingsBtn = card.querySelector('[data-action="edit-worker"]');
     if (settingsBtn) {
       settingsBtn.addEventListener("click", (e) => {
@@ -250,6 +322,8 @@ export function makeFloor(
       const areaId = drop.dataset.areaId;
       const dropFloorId = drop.dataset.floorId || currentSite.floorId || "";
       const isFallback = drop.dataset.fallback === "true";
+      const targetAreaId = isFallback ? FALLBACK_AREA_ID : normalizeAreaId(areaId);
+      const insertIndex = findInsertIndex(drop, e.clientY);
       if (!currentSite?.userId || !currentSite?.siteId) {
         notifyMissingContext();
         return;
@@ -263,6 +337,21 @@ export function makeFloor(
         const workerId = e.dataTransfer.getData("workerId");
         const isLeader =
           typeof getLeaderFlag === "function" ? Boolean(getLeaderFlag(workerId)) : false;
+        const existing = getAreaAssignments(targetAreaId, dropFloorId);
+        const boundedIndex = Math.max(0, Math.min(insertIndex, existing.length));
+        const updates = existing.map((row, idx) => ({
+          assignmentId: row.id,
+          areaId: targetAreaId,
+          floorId: dropFloorId,
+          order: idx >= boundedIndex ? idx + 1 : idx
+        }));
+        if (updates.length) {
+          const orderMap = new Map(updates.map((u) => [u.assignmentId, u.order]));
+          currentAssignments = currentAssignments.map((row) =>
+            orderMap.has(row.id) ? { ...row, order: orderMap.get(row.id) } : row
+          );
+          renderAssignments();
+        }
         console.info("[Floor] creating assignment", {
           workerId,
           areaId,
@@ -270,13 +359,15 @@ export function makeFloor(
           isLeader
         });
         try {
+          await persistOrders(updates);
           await createAssignment({
             userId: currentSite.userId,
             siteId: currentSite.siteId,
             floorId: dropFloorId,
-            areaId,
+            areaId: targetAreaId,
             workerId,
-            isLeader
+            isLeader,
+            order: boundedIndex
           });
         } catch (err) {
           handleActionError("配置の登録に失敗しました", err);
@@ -286,38 +377,76 @@ export function makeFloor(
         const state = dragStates.get(assignmentId);
         if (state) state.handled = true;
         const workerId = e.dataTransfer.getData("workerId");
-        const from = e.dataTransfer.getData("fromAreaId");
-        const fromFloor = e.dataTransfer.getData("fromFloorId");
-        if (from === areaId) return; // 同一エリアなら何もしない
-        console.info("[Floor] updating assignment area", {
+        const from = normalizeAreaId(e.dataTransfer.getData("fromAreaId"));
+        const fromFloor = e.dataTransfer.getData("fromFloorId") || "";
+        const sourceKey = areaKey(from, fromFloor);
+        const targetKey = areaKey(targetAreaId, dropFloorId);
+        const assignmentsByArea = groupAssignments();
+        const movingRow = currentAssignments.find((row) => row.id === assignmentId);
+        const originalTarget = sortAssignments(assignmentsByArea.get(targetKey) || []);
+        const sourceList = sortAssignments(assignmentsByArea.get(sourceKey) || []).filter(
+          (row) => row.id !== assignmentId
+        );
+        const targetList = sortAssignments(assignmentsByArea.get(targetKey) || []).filter(
+          (row) => row.id !== assignmentId
+        );
+        const boundedIndex = Math.max(0, Math.min(insertIndex, targetList.length));
+        const movingEntry = movingRow
+          ? { ...movingRow, areaId: targetAreaId, floorId: dropFloorId }
+          : {
+              id: assignmentId,
+              workerId,
+              areaId: targetAreaId,
+              floorId: dropFloorId
+            };
+        targetList.splice(boundedIndex, 0, movingEntry);
+
+        const updates = [];
+        if (targetKey === sourceKey) {
+          const unchanged =
+            originalTarget.length === targetList.length &&
+            originalTarget.every((row, idx) => row.id === targetList[idx].id);
+          if (unchanged) return;
+        }
+        targetList.forEach((row, idx) => {
+          updates.push({
+            assignmentId: row.id,
+            areaId: row.areaId || targetAreaId,
+            floorId: row.floorId || dropFloorId,
+            order: idx
+          });
+        });
+        if (targetKey !== sourceKey) {
+          sourceList.forEach((row, idx) => {
+            updates.push({
+              assignmentId: row.id,
+              areaId: row.areaId || from,
+              floorId: row.floorId || fromFloor,
+              order: idx
+            });
+          });
+        }
+
+        if (updates.length === 0) return;
+
+        const nextMap = new Map(assignmentsByArea);
+        nextMap.set(sourceKey, sourceList);
+        nextMap.set(targetKey, targetList);
+        const merged = [];
+        nextMap.forEach((list = []) => merged.push(...list));
+        currentAssignments = merged;
+        renderAssignments();
+
+        console.info("[Floor] updating assignment area and order", {
           assignmentId,
           workerId,
           from,
           fromFloor,
           toFloor: dropFloorId,
-          to: isFallback ? FALLBACK_AREA_ID : areaId
+          to: targetAreaId,
+          updates
         });
-        try {
-          if (isFallback) {
-            await updateAssignmentArea({
-              userId: currentSite.userId,
-              siteId: currentSite.siteId,
-              assignmentId,
-              areaId: FALLBACK_AREA_ID,
-              floorId: dropFloorId
-            });
-          } else {
-            await updateAssignmentArea({
-              userId: currentSite.userId,
-              siteId: currentSite.siteId,
-              assignmentId,
-              areaId,
-              floorId: dropFloorId
-            });
-          }
-        } catch (err) {
-          handleActionError("配置エリアの更新に失敗しました", err);
-        }
+        await persistOrders(updates, "配置エリアの更新に失敗しました");
       }
     });
   }
@@ -343,13 +472,22 @@ export function makeFloor(
       if (drop) drop.innerHTML = "";
     });
     const activeFallbackFloors = new Set();
-    currentAssignments.forEach((r) => {
-      const floorId =
-        r.floorId || currentSite.floorId || _areas[0]?.floorId || "";
-      let targetAreaId = r.areaId || FALLBACK_AREA_ID;
+    const normalizedAssignments = (currentAssignments || []).map((r) => ({
+      ...r,
+      areaId: normalizeAreaId(r.areaId),
+      floorId: r.floorId || currentSite.floorId || _areas[0]?.floorId || ""
+    }));
+
+    const grouped = groupAssignments(normalizedAssignments);
+    grouped.forEach((list = []) => {
+      const sorted = sortAssignments(list);
+      if (!sorted.length) return;
+      const areaId = sorted[0].areaId || FALLBACK_AREA_ID;
+      const floorId = sorted[0].floorId || "";
       let drop = zonesEl.querySelector(
-        `.droparea[data-area-id="${targetAreaId}"][data-floor-id="${floorId}"]`
+        `.droparea[data-area-id="${areaId}"][data-floor-id="${floorId}"]`
       );
+      let targetAreaId = areaId;
       if (!drop) {
         targetAreaId = FALLBACK_AREA_ID;
       }
@@ -358,7 +496,10 @@ export function makeFloor(
         activeFallbackFloors.add(floorId || "__none__");
       }
       if (drop) {
-        addSlot(drop, r.workerId, targetAreaId, r.id, floorId);
+        sorted.forEach((r, idx) => {
+          const order = typeof r.order === "number" ? r.order : idx;
+          addSlot(drop, r.workerId, targetAreaId, r.id, floorId, order);
+        });
       }
     });
     cleanupFallbackZones(activeFallbackFloors);

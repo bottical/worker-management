@@ -340,7 +340,8 @@ export async function createAssignment({
   floorId,
   areaId,
   workerId,
-  isLeader
+  isLeader,
+  order
 }) {
   assertUserSite({ userId, siteId });
   if (!workerId) throw new Error("workerId is required");
@@ -370,6 +371,7 @@ export async function createAssignment({
     areaId: areaId || "",
     workerId,
     isLeader: Boolean(isLeader),
+    order: typeof order === "number" ? order : 0,
     date: new Date().toISOString().slice(0, 10),
     inAt: serverTimestamp(),
     outAt: null,
@@ -444,6 +446,33 @@ export async function updateAssignmentLeader({
     isLeader: Boolean(isLeader),
     updatedAt: serverTimestamp()
   });
+}
+
+/** 並び順や配置情報の一括更新（ドラッグ＆ドロップ向け） */
+export async function updateAssignmentsOrder({ userId, siteId, updates }) {
+  assertUserSite({ userId, siteId });
+  if (!Array.isArray(updates) || updates.length === 0) return;
+  const batch = writeBatch(db);
+  updates
+    .map((u, idx) => ({
+      assignmentId: u.assignmentId || u.id,
+      areaId: typeof u.areaId === "string" ? u.areaId : undefined,
+      floorId: typeof u.floorId === "string" ? u.floorId : undefined,
+      order: typeof u.order === "number" ? u.order : idx
+    }))
+    .filter((u) => u.assignmentId)
+    .forEach((u) => {
+      const ref = siteDocument(userId, siteId, "assignments", u.assignmentId);
+      const payload = { order: u.order, updatedAt: serverTimestamp() };
+      if (typeof u.areaId === "string") {
+        payload.areaId = u.areaId;
+      }
+      if (typeof u.floorId === "string") {
+        payload.floorId = u.floorId;
+      }
+      batch.update(ref, payload);
+    });
+  await batch.commit();
 }
 
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */

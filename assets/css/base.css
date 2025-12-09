@@ -16,7 +16,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .right{}
 .hint{font-size:12px;color:var(--muted)}
 .cards{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
-.card{position:relative;display:grid;grid-template-columns:52px 1fr 52px;align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden}
+.card{position:relative;display:grid;grid-template-columns:104px 1fr 104px;align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden}
 .card.readonly{cursor:default;opacity:.85}
 .card.dragging{opacity:.6}
 .card-action{position:absolute;top:6px;right:6px;border:1px solid var(--border);background:#f8fafc;color:var(--muted);border-radius:8px;padding:4px 6px;font-size:12px;cursor:pointer;line-height:1;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility .15s ease}
@@ -30,14 +30,13 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card-time{align-self:center;padding:6px 12px;border-radius:10px;background:#fef3c7;color:#92400e;border:1px solid var(--border);font-weight:700;text-align:center}
 .card-location{color:var(--muted)}
 .card-memo{color:var(--muted);word-break:break-all}
-.skill-column{display:flex;flex-direction:column;gap:0;align-items:stretch;justify-content:stretch;min-width:48px;height:100%}
-.skill-column.left{border-radius:12px 0 0 12px;overflow:hidden}
-.skill-column.right{border-radius:0 12px 12px 0;overflow:hidden}
-.skill-indicator{flex:1 1 0;min-height:0;width:100%;border:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:6px 4px;position:relative;background:transparent;transition:.15s}
+.skill-column-group{display:grid;grid-template-columns:repeat(2,1fr);gap:0;align-items:stretch;justify-content:stretch;min-width:104px;height:100%}
+.skill-column-group.left{border-radius:12px 0 0 12px;overflow:hidden}
+.skill-column-group.right{border-radius:0 12px 12px 0;overflow:hidden}
+.skill-column{display:flex;flex-direction:column;gap:0;align-items:stretch;justify-content:stretch;height:100%}
+.skill-indicator{flex:1 1 0;min-height:32px;width:100%;border:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:6px 4px;position:relative;background:transparent;transition:.15s}
 .skill-indicator[data-level="mid"],.skill-indicator[data-level="high"]{background:var(--skill-color);color:var(--card-accent-text,var(--ink))}
 .skill-indicator[data-level="high"]::before{content:"";position:absolute;top:6px;left:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;background:#0f172a;box-shadow:0 0 0 2px #fff}
-.skill-label{font-size:10px;line-height:1;text-align:center;color:var(--muted);padding:2px 4px;white-space:nowrap}
-.skill-indicator[data-level="mid"] .skill-label,.skill-indicator[data-level="high"] .skill-label{color:var(--card-accent-text,var(--ink))}
 .leader-mark{color:#ef4444;margin-left:6px;font-size:14px}
 .zones{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;min-height:300px}
 .zone{background:var(--area);border:2px solid #c7d2fe;border-radius:16px;min-height:220px;padding:10px;position:relative;transition:.2s}

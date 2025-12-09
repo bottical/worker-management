@@ -38,6 +38,7 @@ function createSkillIndicator(skill, levelId, levelOrder, idx) {
   const indicator = document.createElement("div");
   indicator.className = "skill-indicator";
   indicator.dataset.skillId = skill.id;
+  indicator.title = skill.name;
   indicator.style.setProperty("--skill-color", SKILL_COLORS[idx % SKILL_COLORS.length]);
 
   const rank = levelOrder.get(levelId);
@@ -49,27 +50,33 @@ function createSkillIndicator(skill, levelId, levelOrder, idx) {
     indicator.dataset.level = "none";
   }
 
-  const label = document.createElement("span");
-  label.className = "skill-label";
-  label.textContent = skill.name;
-  indicator.appendChild(label);
   return indicator;
+}
+
+function createSkillColumn() {
+  const column = document.createElement("div");
+  column.className = "skill-column";
+  return column;
 }
 
 export function createSkillColumns(skillSettings = DEFAULT_SKILL_SETTINGS, skillLevels = {}) {
   const skills = getNormalizedSkills(skillSettings);
   const levelOrder = getLevelOrder(skillSettings);
-  const left = document.createElement("div");
-  left.className = "skill-column left";
-  const right = document.createElement("div");
-  right.className = "skill-column right";
+  const columns = Array.from({ length: 4 }, () => createSkillColumn());
 
-  const midpoint = Math.ceil(skills.length / 2) || 1;
   skills.forEach((skill, idx) => {
-    const target = idx < midpoint ? left : right;
     const levelId = skillLevels?.[skill.id] || "";
-    target.appendChild(createSkillIndicator(skill, levelId, levelOrder, idx));
+    const column = columns[idx % columns.length];
+    column.appendChild(createSkillIndicator(skill, levelId, levelOrder, idx));
   });
+
+  const left = document.createElement("div");
+  left.className = "skill-column-group left";
+  left.append(columns[0], columns[1]);
+
+  const right = document.createElement("div");
+  right.className = "skill-column-group right";
+  right.append(columns[2], columns[3]);
 
   return { left, right };
 }

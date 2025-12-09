@@ -37,7 +37,7 @@ function applyAccent(el, color) {
   }
 }
 
-function buildCardBody(worker, readOnly) {
+function buildCardBody(worker) {
   const body = document.createElement("div");
   body.className = "card-body";
 
@@ -77,21 +77,16 @@ function buildCardBody(worker, readOnly) {
   metaRow.appendChild(memo);
   metaRow.appendChild(employment);
 
-  const hint = document.createElement("div");
-  hint.className = "hint";
-  hint.textContent = readOnly ? "閲覧モード" : "ドラッグで配置（IN）";
-
   body.appendChild(header);
   body.appendChild(time);
   body.appendChild(metaRow);
-  body.appendChild(hint);
 
   return body;
 }
 
 function card(worker, readOnly, onEditWorker, skillSettings) {
   const el = document.createElement("div");
-  el.className = "card";
+  el.className = "card pool-card";
   const panelColor = worker.panel?.color || worker.panelColor || "";
   applyAccent(el, panelColor);
 
@@ -107,7 +102,7 @@ function card(worker, readOnly, onEditWorker, skillSettings) {
     skillSettings,
     normalizeSkillLevels(worker.skillLevels)
   );
-  const body = buildCardBody(worker, readOnly);
+  const body = buildCardBody(worker);
 
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";

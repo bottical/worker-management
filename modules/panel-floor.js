@@ -26,7 +26,10 @@ export function makeFloor(
   options = {}
 ) {
   let _workerMap = new Map(workerMap || []);
-  let _areas = normalizeAreas(areas);
+  const normalizedAreaPayload = normalizeAreaPayload(areas);
+  let _areas = normalizeAreas(normalizedAreaPayload.areas);
+  let _layout = normalizedAreaPayload.layout;
+  let _layoutMap = normalizedAreaPayload.layouts;
   let _readOnly = false;
   let currentAssignments = [];
   let currentSite = { ...site };
@@ -35,6 +38,11 @@ export function makeFloor(
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
   const { onEditWorker, getLeaderFlag } = options;
+
+  function toPositiveInt(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
+  }
 
   function timestampToMillis(ts) {
     if (!ts) return 0;
@@ -527,7 +535,10 @@ export function makeFloor(
   }
 
   function setAreas(list) {
-    _areas = normalizeAreas(list);
+    const payload = normalizeAreaPayload(list);
+    _areas = normalizeAreas(payload.areas);
+    _layout = payload.layout;
+    _layoutMap = payload.layouts;
     renderZones();
     renderAssignments();
   }
@@ -554,11 +565,13 @@ export function makeFloor(
   function renderZones() {
     zonesEl.innerHTML = "";
     fallbackZoneEls = new Map();
+    applyGridTemplate();
     _areas.forEach((area) => {
       const zone = document.createElement("div");
       zone.className = "zone";
       zone.dataset.floorId = area.floorId || "";
       zone.dataset.areaId = area.id;
+      applyAreaLayout(zone, area);
       const title = document.createElement("h3");
       const floorLabel = area.floorLabel || getFloorLabel(area.floorId);
       title.textContent = floorLabel
@@ -631,7 +644,11 @@ export function makeFloor(
         order: typeof a.order === "number" ? a.order : idx,
         floorId: a.floorId || "",
         floorLabel: a.floorLabel || "",
-        floorOrder: typeof a.floorOrder === "number" ? a.floorOrder : 0
+        floorOrder: typeof a.floorOrder === "number" ? a.floorOrder : 0,
+        gridRow: toPositiveInt(a.gridRow || a.row),
+        gridColumn: toPositiveInt(a.gridColumn || a.column),
+        rowSpan: toPositiveInt(a.rowSpan || a.gridRowSpan),
+        colSpan: toPositiveInt(a.colSpan || a.gridColSpan)
       }))
       .filter((a) => a.id && a.id !== FALLBACK_AREA_ID)
       .sort((a, b) => {
@@ -639,6 +656,53 @@ export function makeFloor(
         if (floorOrderDiff !== 0) return floorOrderDiff;
         return (a.order ?? 0) - (b.order ?? 0);
       });
+  }
+
+  function normalizeLayout(layout = {}) {
+    const columns = toPositiveInt(layout.columns);
+    return { columns: columns && columns > 0 && columns <= 12 ? columns : 0 };
+  }
+
+  function normalizeAreaPayload(input) {
+    if (Array.isArray(input)) {
+      return { areas: input, layout: normalizeLayout(), layouts: new Map() };
+    }
+    const areasList = Array.isArray(input?.areas) ? input.areas : DEFAULT_AREAS;
+    const layout = normalizeLayout(input?.layout || {});
+    const providedLayouts = input?.layouts instanceof Map ? input.layouts : new Map();
+    const layouts = new Map();
+    providedLayouts.forEach((value, key) => {
+      layouts.set(key, normalizeLayout(value));
+    });
+    return { areas: areasList, layout, layouts };
+  }
+
+  function getLayoutForFloor(floorId) {
+    return _layoutMap.get(floorId) || _layout || { columns: 0 };
+  }
+
+  function applyGridTemplate() {
+    const uniqueColumns = new Set();
+    _layoutMap.forEach((layout) => {
+      if (layout?.columns) uniqueColumns.add(layout.columns);
+    });
+    if (_layout?.columns) {
+      uniqueColumns.add(_layout.columns);
+    }
+    const columns = uniqueColumns.size === 1 ? uniqueColumns.values().next().value : 0;
+    const template = columns
+      ? `repeat(${columns}, minmax(260px, 1fr))`
+      : "repeat(auto-fit,minmax(260px,1fr))";
+    zonesEl.style.setProperty("--zone-columns", template);
+  }
+
+  function applyAreaLayout(zone, area) {
+    if (!zone || !area) return;
+    const { gridRow, gridColumn, rowSpan, colSpan } = area;
+    zone.style.gridRowStart = gridRow ? `${gridRow}` : "";
+    zone.style.gridColumnStart = gridColumn ? `${gridColumn}` : "";
+    zone.style.gridRowEnd = rowSpan ? `span ${rowSpan}` : "";
+    zone.style.gridColumnEnd = colSpan ? `span ${colSpan}` : "";
   }
 
   // グローバルフック（既存実装がこれを呼ぶ）

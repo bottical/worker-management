@@ -31,6 +31,8 @@ export const DEFAULT_AREAS = [
   { id: "B", label: "エリアB", order: 1 }
 ];
 
+const DEFAULT_AREA_LAYOUT = { columns: 0 };
+
 export const DEFAULT_FLOORS = [
   { id: "1F", label: "1F", order: 0 }
 ];
@@ -117,6 +119,34 @@ function normalizedDefaultAreas() {
       label: a.label,
       order: typeof a.order === "number" ? a.order : idx
     }));
+}
+
+function toPositiveInt(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
+}
+
+function sanitizeAreaLayout(layout = {}) {
+  const columns = toPositiveInt(layout.columns);
+  return {
+    columns: columns && columns > 0 && columns <= 12 ? columns : 0
+  };
+}
+
+function sanitizeAreaConfig(area, idx) {
+  return {
+    id: area.id || area.areaId || `Z${idx + 1}`,
+    label: area.label || area.name || `エリア${area.id || idx + 1}`,
+    order: typeof area.order === "number" ? area.order : idx,
+    gridRow: toPositiveInt(area.gridRow || area.row),
+    gridColumn: toPositiveInt(area.gridColumn || area.column),
+    rowSpan: toPositiveInt(area.rowSpan || area.gridRowSpan),
+    colSpan: toPositiveInt(area.colSpan || area.gridColSpan)
+  };
+}
+
+function defaultAreaPayload() {
+  return { areas: normalizedDefaultAreas(), layout: { ...DEFAULT_AREA_LAYOUT } };
 }
 
 function normalizeSkillSettings(settings = {}) {
@@ -528,19 +558,19 @@ export async function getAreasOnce({ userId, siteId, floorId }) {
   const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    return floorId ? [] : normalizedDefaultAreas();
+    return floorId ? defaultAreaPayload() : defaultAreaPayload();
   }
   const data = snap.data();
   if (!Array.isArray(data?.areas)) {
-    return floorId ? [] : normalizedDefaultAreas();
+    return floorId ? defaultAreaPayload() : defaultAreaPayload();
   }
-  return data.areas
-    .map((a, idx) => ({
-      id: a.id || a.areaId || `Z${idx + 1}`,
-      label: a.label || a.name || `エリア${a.id || idx + 1}`,
-      order: typeof a.order === "number" ? a.order : idx
-    }))
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const layout = sanitizeAreaLayout(data.layout || {});
+  const areas = data.areas
+    .map((a, idx) => sanitizeAreaConfig(a, idx))
+    .filter((a) => a.id)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((a, idx) => ({ ...a, order: typeof a.order === "number" ? a.order : idx }));
+  return { areas, layout };
 }
 
 export function subscribeAreas({ userId, siteId, floorId }, cb) {
@@ -550,35 +580,37 @@ export function subscribeAreas({ userId, siteId, floorId }, cb) {
     ref,
     (snap) => {
       if (!snap.exists()) {
-        cb(floorId ? [] : DEFAULT_AREAS.slice());
+        cb(defaultAreaPayload());
       } else {
         const data = snap.data();
+        const layout = sanitizeAreaLayout(data.layout || {});
         const areas = Array.isArray(data?.areas)
-          ? data.areas.map((a, idx) => ({
-              id: a.id || a.areaId || `Z${idx + 1}`,
-              label: a.label || a.name || `エリア${a.id || idx + 1}`,
-              order: typeof a.order === "number" ? a.order : idx
-            }))
-          : floorId
-          ? []
-          : DEFAULT_AREAS.slice();
-        cb(areas.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+          ? data.areas
+              .map((a, idx) => sanitizeAreaConfig(a, idx))
+              .filter((a) => a.id)
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+              .map((a, idx) => ({ ...a, order: typeof a.order === "number" ? a.order : idx }))
+          : defaultAreaPayload().areas;
+        cb({ areas, layout });
       }
     },
     (err) => {
       console.error("subscribeAreas failed", err);
-      cb(floorId ? [] : DEFAULT_AREAS.slice());
+      cb(defaultAreaPayload());
     }
   );
 }
 
-export async function saveAreas({ userId, siteId, floorId, areas }) {
+export async function saveAreas({ userId, siteId, floorId, areas, layout }) {
   assertUserSite({ userId, siteId });
-  const sanitized = (areas || []).map((a, idx) => ({
-    id: a.id,
-    label: a.label,
-    order: typeof a.order === "number" ? a.order : idx
-  }));
+  const sanitizedLayout = sanitizeAreaLayout(layout || {});
+  const sanitized = (areas || [])
+    .map((a, idx) => sanitizeAreaConfig(a, idx))
+    .filter((a) => a.id)
+    .map((a, idx) => ({
+      ...a,
+      order: typeof a.order === "number" ? a.order : idx
+    }));
   await ensureSiteMetadata(userId, siteId);
   const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
   await setDoc(
@@ -587,11 +619,12 @@ export async function saveAreas({ userId, siteId, floorId, areas }) {
       siteId,
       floorId: floorId || "",
       areas: sanitized,
+      layout: sanitizedLayout,
       updatedAt: serverTimestamp()
     },
     { merge: true }
   );
-  return sanitized;
+  return { areas: sanitized, layout: sanitizedLayout };
 }
 
 /* =========================

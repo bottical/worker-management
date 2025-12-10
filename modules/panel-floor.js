@@ -581,6 +581,7 @@ export function makeFloor(
       drop.className = "droparea";
       drop.dataset.areaId = area.id;
       drop.dataset.floorId = area.floorId || "";
+      drop.style.setProperty("--drop-columns", `${getDropColumns(area)}`);
       zone.appendChild(title);
       zone.appendChild(drop);
       zonesEl.appendChild(zone);
@@ -615,6 +616,7 @@ export function makeFloor(
     drop.dataset.areaId = FALLBACK_AREA_ID;
     drop.dataset.fallback = "true";
     drop.dataset.floorId = floorId || "";
+    drop.style.setProperty("--drop-columns", `${getDropColumns({ floorId })}`);
     zone.appendChild(title);
     zone.appendChild(drop);
     zonesEl.appendChild(zone);
@@ -679,6 +681,12 @@ export function makeFloor(
 
   function getLayoutForFloor(floorId) {
     return _layoutMap.get(floorId) || _layout || { columns: 0 };
+  }
+
+  function getDropColumns(area) {
+    const layout = getLayoutForFloor(area?.floorId);
+    const columns = toPositiveInt(layout?.columns);
+    return columns || 2;
   }
 
   function applyGridTemplate() {

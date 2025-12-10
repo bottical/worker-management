@@ -17,12 +17,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .hint{font-size:12px;color:var(--muted)}
 .cards{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
 .card{position:relative;display:grid;grid-template-columns:minmax(30px,72px) 1fr minmax(30px,72px);align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden}
-.card.pool-card{grid-template-columns:minmax(24px,60px) 1fr minmax(24px,60px);border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.03);font-size:13px}
-.card.pool-card .card-body{padding:10px;gap:6px}
-.card.pool-card .card-name{font-size:1.3em}
-.card.pool-card .card-time{padding:4px 10px;font-size:12px}
-.card.pool-card .employment-count{font-size:11px}
-.card.pool-card .employment-count .count{font-size:16px}
+.card.pool-card{grid-template-columns:minmax(16px,48px) 1fr minmax(16px,48px);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.03);font-size:12px}
+.card.pool-card .card-body{padding:8px;gap:4px}
+.card.pool-card .card-name{font-size:1.1em}
+.card.pool-card .card-time{padding:3px 8px;font-size:11px}
+.card.pool-card .employment-count{font-size:10px}
+.card.pool-card .employment-count .count{font-size:14px}
 .card.pool-card .card-action{top:4px;right:4px}
 .card.readonly{cursor:default;opacity:.85}
 .card.dragging{opacity:.6}

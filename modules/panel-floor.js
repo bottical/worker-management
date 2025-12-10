@@ -31,6 +31,7 @@ export function makeFloor(
   let currentAssignments = [];
   let currentSite = { ...site };
   let _skillSettings = options.skillSettings || DEFAULT_SKILL_SETTINGS;
+  let _showFallback = true;
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
   const { onEditWorker, getLeaderFlag } = options;
@@ -488,21 +489,24 @@ export function makeFloor(
         `.droparea[data-area-id="${areaId}"][data-floor-id="${floorId}"]`
       );
       let targetAreaId = areaId;
-      if (!drop) {
+      if (!drop && _showFallback) {
         targetAreaId = FALLBACK_AREA_ID;
       }
-      if (targetAreaId === FALLBACK_AREA_ID) {
+      if (targetAreaId === FALLBACK_AREA_ID && _showFallback) {
         drop = ensureFallbackZone(floorId);
         activeFallbackFloors.add(floorId || "__none__");
       }
-      if (drop) {
-        sorted.forEach((r, idx) => {
-          const order = typeof r.order === "number" ? r.order : idx;
-          addSlot(drop, r.workerId, targetAreaId, r.id, floorId, order);
-        });
-      }
+      if (!drop) return;
+      sorted.forEach((r, idx) => {
+        const order = typeof r.order === "number" ? r.order : idx;
+        addSlot(drop, r.workerId, targetAreaId, r.id, floorId, order);
+      });
     });
-    cleanupFallbackZones(activeFallbackFloors);
+    if (_showFallback) {
+      cleanupFallbackZones(activeFallbackFloors);
+    } else {
+      cleanupFallbackZones(new Set());
+    }
   }
 
   // 外部（Dashboard）から呼ばれる：workerMapを差し替え→色・時間・表示を更新
@@ -539,6 +543,11 @@ export function makeFloor(
 
   function setSkillSettings(settings = DEFAULT_SKILL_SETTINGS) {
     _skillSettings = settings || DEFAULT_SKILL_SETTINGS;
+    renderAssignments();
+  }
+
+  function setFallbackVisibility(flag = true) {
+    _showFallback = Boolean(flag);
     renderAssignments();
   }
 
@@ -639,7 +648,8 @@ export function makeFloor(
     setAreas,
     setReadOnly,
     setSite,
-    setSkillSettings
+    setSkillSettings,
+    setFallbackVisibility
   };
   window.__floorRender = api;
 

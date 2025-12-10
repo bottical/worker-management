@@ -52,6 +52,7 @@ export function renderDashboard(mount) {
   toolbar.innerHTML = `
     <label>フロア<select id="floorSelect"></select></label>
     <label>表示日<input type="date" id="assignmentDate" /></label>
+    <label class="checkbox"><input type="checkbox" id="toggleFallback" checked>未配置カラムを表示</label>
     <div id="viewMode" class="hint"></div>
   `;
   mount.appendChild(toolbar);
@@ -62,6 +63,7 @@ export function renderDashboard(mount) {
   const countEl = wrap.querySelector("#count");
   const dateInput = toolbar.querySelector("#assignmentDate");
   const floorSelect = toolbar.querySelector("#floorSelect");
+  const fallbackToggle = toolbar.querySelector("#toggleFallback");
   const viewModeEl = toolbar.querySelector("#viewMode");
 
   function toWorkerMaster(row) {
@@ -140,6 +142,7 @@ export function renderDashboard(mount) {
       : new Map();
   let workerMap = new Map(masterWorkerMap);
   let floorList = DEFAULT_FLOORS.slice();
+  let showFallback = true;
 
   // エリア情報
   let areaList = DEFAULT_AREAS.map((a, idx) => ({
@@ -196,6 +199,7 @@ export function renderDashboard(mount) {
     getLeaderFlag,
     skillSettings
   });
+  floorApi.setFallbackVisibility(showFallback);
   makePool(poolEl, state.site);
 
   // 購読状態
@@ -705,6 +709,14 @@ export function renderDashboard(mount) {
     floorSelect.addEventListener("change", (e) => {
       const next = e.target.value || "";
       handleFloorChange(next);
+    });
+  }
+
+  if (fallbackToggle) {
+    fallbackToggle.checked = showFallback;
+    fallbackToggle.addEventListener("change", (e) => {
+      showFallback = Boolean(e.target.checked);
+      floorApi.setFallbackVisibility(showFallback);
     });
   }
 

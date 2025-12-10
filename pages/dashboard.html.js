@@ -52,7 +52,10 @@ export function renderDashboard(mount) {
   toolbar.innerHTML = `
     <label>フロア<select id="floorSelect"></select></label>
     <label>表示日<input type="date" id="assignmentDate" /></label>
-    <label class="checkbox"><input type="checkbox" id="toggleFallback" checked>未配置カラムを表示</label>
+    <button type="button" id="toggleFallback" class="toggle-pool" aria-pressed="true" title="未配置カラムを非表示">
+      <span class="icon" aria-hidden="true">≡</span>
+      <span class="label">未配置カラム</span>
+    </button>
     <div id="viewMode" class="hint"></div>
   `;
   mount.appendChild(toolbar);
@@ -156,6 +159,17 @@ export function renderDashboard(mount) {
 
   const workerEditor = createWorkerEditor();
 
+  function updatePoolVisibility() {
+    const isActive = Boolean(showFallback);
+    fallbackToggle.setAttribute("aria-pressed", isActive);
+    fallbackToggle.dataset.active = isActive ? "true" : "false";
+    fallbackToggle.title = isActive
+      ? "未配置カラムを非表示"
+      : "未配置カラムを表示";
+    wrap.classList.toggle("pool-hidden", !isActive);
+    floorApi.setFallbackVisibility(isActive);
+  }
+
   function getWorkerForEditing(workerId) {
     const master = masterWorkerLookup.get(workerId) || {};
     const mapEntry = workerMap.get(workerId) || {};
@@ -199,7 +213,6 @@ export function renderDashboard(mount) {
     getLeaderFlag,
     skillSettings
   });
-  floorApi.setFallbackVisibility(showFallback);
   makePool(poolEl, state.site);
 
   // 購読状態
@@ -713,10 +726,10 @@ export function renderDashboard(mount) {
   }
 
   if (fallbackToggle) {
-    fallbackToggle.checked = showFallback;
-    fallbackToggle.addEventListener("change", (e) => {
-      showFallback = Boolean(e.target.checked);
-      floorApi.setFallbackVisibility(showFallback);
+    updatePoolVisibility();
+    fallbackToggle.addEventListener("click", () => {
+      showFallback = !showFallback;
+      updatePoolVisibility();
     });
   }
 

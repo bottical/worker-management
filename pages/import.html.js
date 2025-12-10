@@ -72,8 +72,9 @@ async function resolveRowsWithFloors(rows, { userId, siteId, defaultFloorId }) {
 
     await Promise.all(
       Array.from(floorSet).map(async (floorId) => {
-        const areas = await getAreasOnce({ userId, siteId, floorId });
-        areas
+        const payload = await getAreasOnce({ userId, siteId, floorId });
+        const areas = Array.isArray(payload?.areas) ? payload.areas : payload;
+        (areas || [])
           .map((a) => a?.id)
           .filter(Boolean)
           .forEach((areaId) => {

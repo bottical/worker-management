@@ -47,7 +47,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .skill-indicator[data-level="mid"],.skill-indicator[data-level="high"]{background:var(--skill-color);color:var(--card-accent-text,var(--ink))}
 .skill-indicator[data-level="high"]::before{content:"";position:absolute;top:12px;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;background:#0f172a;box-shadow:0 0 0 2px #fff}
 .leader-mark{color:#ef4444;margin-left:6px;font-size:14px}
-.zones{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;min-height:300px}
+.zones{display:grid;grid-template-columns:var(--zone-columns,repeat(auto-fit,minmax(260px,1fr)));gap:16px;min-height:300px}
 .zone{background:var(--area);border:2px solid #c7d2fe;border-radius:16px;min-height:220px;padding:10px;position:relative;transition:.2s}
 .zone h3{margin:0 0 8px 0;font-size:13px;color:var(--muted)}
 .zone.dragover{outline:3px dashed var(--accent);outline-offset:-6px}

@@ -148,12 +148,14 @@ export function renderDashboard(mount) {
   let showFallback = true;
 
   // エリア情報
+  const defaultFloorId = state.site.floorId || DEFAULT_FLOORS[0]?.id || "";
   let areaList = DEFAULT_AREAS.map((a, idx) => ({
     ...a,
-    floorId: state.site.floorId || DEFAULT_FLOORS[0]?.id || "",
-    floorLabel: state.site.floorId || DEFAULT_FLOORS[0]?.label || "",
+    floorId: defaultFloorId,
+    floorLabel: defaultFloorId || DEFAULT_FLOORS[0]?.label || "",
     floorOrder: idx
   }));
+  let areaLayoutMap = new Map([[defaultFloorId, { columns: 0 }]]);
   const areaCache = new Map();
   const areaSubscriptions = new Map();
 
@@ -208,11 +210,17 @@ export function renderDashboard(mount) {
   }
 
   // フロア初期化
-  const floorApi = makeFloor(floorEl, state.site, workerMap, areaList, {
-    onEditWorker: openWorkerEditor,
-    getLeaderFlag,
-    skillSettings
-  });
+  const floorApi = makeFloor(
+    floorEl,
+    state.site,
+    workerMap,
+    { areas: areaList, layouts: areaLayoutMap },
+    {
+      onEditWorker: openWorkerEditor,
+      getLeaderFlag,
+      skillSettings
+    }
+  );
   makePool(poolEl, state.site);
 
   // 購読状態
@@ -559,16 +567,44 @@ export function renderDashboard(mount) {
     return map;
   }
 
-  function decorateAreasForFloor(floorId, areas = DEFAULT_AREAS) {
+  function toPositiveInt(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
+  }
+
+  function normalizeLayoutConfig(layout = {}) {
+    const columns = toPositiveInt(layout.columns);
+    return { columns: columns && columns > 0 && columns <= 12 ? columns : 0 };
+  }
+
+  function normalizeAreaPayload(payload) {
+    if (Array.isArray(payload)) {
+      return { areas: payload, layout: { columns: 0 } };
+    }
+    return {
+      areas: Array.isArray(payload?.areas) ? payload.areas : [],
+      layout: normalizeLayoutConfig(payload?.layout || {})
+    };
+  }
+
+  function decorateAreasForFloor(floorId, payload = DEFAULT_AREAS) {
     const metaMap = getFloorLabelMap();
     const meta = metaMap.get(floorId) || { label: floorId || "", order: 0 };
-    const list = Array.isArray(areas) ? areas : DEFAULT_AREAS;
-    return list.map((a, idx) => ({
+    const { areas: targetAreas, layout } = normalizeAreaPayload(payload);
+    const list = Array.isArray(targetAreas) && targetAreas.length
+      ? targetAreas
+      : DEFAULT_AREAS;
+    const decoratedAreas = list.map((a, idx) => ({
       ...a,
+      gridColumn: toPositiveInt(a.gridColumn || a.column),
+      gridRow: toPositiveInt(a.gridRow || a.row),
+      colSpan: toPositiveInt(a.colSpan || a.gridColSpan),
+      rowSpan: toPositiveInt(a.rowSpan || a.gridRowSpan),
       floorId,
       floorLabel: meta.label,
       floorOrder: typeof meta.order === "number" ? meta.order : idx
     }));
+    return { areas: decoratedAreas, layout: normalizeLayoutConfig(layout) };
   }
 
   function getTargetFloorsForView() {
@@ -607,8 +643,8 @@ export function renderDashboard(mount) {
         siteId: state.site.siteId,
         floorId
       },
-      (areas) => {
-        areaCache.set(floorId, areas);
+      (payload) => {
+        areaCache.set(floorId, normalizeAreaPayload(payload));
         refreshAreasForView();
       }
     );
@@ -618,17 +654,23 @@ export function renderDashboard(mount) {
   function refreshAreasForView() {
     const targets = getTargetFloorsForView();
     if (!targets.length) {
-      areaList = decorateAreasForFloor("", DEFAULT_AREAS);
-      floorApi.setAreas(areaList);
+      const decorated = decorateAreasForFloor("", DEFAULT_AREAS);
+      areaList = decorated.areas;
+      areaLayoutMap = new Map([["", decorated.layout]]);
+      floorApi.setAreas({ areas: areaList, layouts: areaLayoutMap });
       reconcile();
       return;
     }
+    const layoutMap = new Map();
     const merged = targets.flatMap((floorId) => {
       const cached = areaCache.has(floorId) ? areaCache.get(floorId) : [];
-      return decorateAreasForFloor(floorId, cached);
+      const { areas, layout } = decorateAreasForFloor(floorId, cached);
+      layoutMap.set(floorId, layout);
+      return areas;
     });
     areaList = merged;
-    floorApi.setAreas(areaList);
+    areaLayoutMap = layoutMap;
+    floorApi.setAreas({ areas: areaList, layouts: areaLayoutMap });
     reconcile();
   }
 

@@ -37,11 +37,20 @@ export function renderAreas(mount) {
       <h3>エリア設定</h3>
       <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:8px">
         <label>対象フロア<select id="floorSelect"></select></label>
+        <label>表示列数（このフロア全体）<input name="columnCount" id="columnCount" type="number" min="1" max="12" placeholder="自動" /></label>
       </div>
       <div class="hint" id="currentFloorHint" style="margin-top:4px"></div>
+      <div class="form-actions" style="margin-top:8px">
+        <div class="hint">空欄のまま保存すると従来通り自動で列幅を決定します。</div>
+        <button class="button ghost" type="button" id="saveLayout">配置設定のみ保存</button>
+      </div>
       <form id="areaForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:16px">
         <label>エリアID（例: A）<input name="areaId" required maxlength="20" /></label>
         <label>表示名（例: エリアA）<input name="label" required maxlength="40" /></label>
+        <label>列番号（1〜、未入力で自動）<input name="gridColumn" type="number" min="1" max="12" /></label>
+        <label>行番号（1〜、未入力で自動）<input name="gridRow" type="number" min="1" max="12" /></label>
+        <label>横幅（列数）<input name="colSpan" type="number" min="1" max="12" placeholder="1" /></label>
+        <label>縦幅（行数）<input name="rowSpan" type="number" min="1" max="12" placeholder="1" /></label>
         <div class="form-actions" style="grid-column:1/-1">
           <button class="button" type="submit">追加 / 更新</button>
           <button class="button ghost" type="button" id="clearForm">クリア</button>
@@ -49,7 +58,7 @@ export function renderAreas(mount) {
       </form>
       <table class="table" style="margin-top:16px">
         <thead>
-          <tr><th>#</th><th>ID</th><th>表示名</th><th>操作</th></tr>
+          <tr><th>#</th><th>ID</th><th>表示名</th><th>配置</th><th>操作</th></tr>
         </thead>
         <tbody id="areaRows"></tbody>
       </table>
@@ -74,15 +83,39 @@ export function renderAreas(mount) {
   const areaForm = wrap.querySelector("#areaForm");
   const clearAreaBtn = wrap.querySelector("#clearForm");
   const areaRowsEl = wrap.querySelector("#areaRows");
+  const columnCountInput = wrap.querySelector("#columnCount");
+  const saveLayoutBtn = wrap.querySelector("#saveLayout");
 
   let floors = DEFAULT_FLOORS.slice();
   let floorsLoaded = false;
   let areas = DEFAULT_AREAS.slice();
+  let layoutConfig = { columns: 0 };
   let currentFloorId =
     state.site.floorId || floors[0]?.id || DEFAULT_FLOORS[0]?.id || "";
   let unsubFloors = () => {};
   let unsubAreas = () => {};
   const areaCache = new Map();
+  const layoutCache = new Map();
+
+  function toPositiveInt(value) {
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
+  }
+
+  function normalizeLayoutConfig(layout = {}) {
+    const columns = toPositiveInt(layout.columns);
+    return { columns: columns && columns > 0 && columns <= 12 ? columns : 0 };
+  }
+
+  function normalizeAreaPayload(payload) {
+    if (Array.isArray(payload)) {
+      return { areas: payload, layout: { columns: 0 } };
+    }
+    return {
+      areas: Array.isArray(payload?.areas) ? payload.areas : [],
+      layout: normalizeLayoutConfig(payload?.layout || {})
+    };
+  }
 
   function currentFloor() {
     return floors.find((f) => f.id === currentFloorId) || null;
@@ -96,6 +129,16 @@ export function renderAreas(mount) {
     } else {
       floorHint.textContent = `対象フロア: ${info.label}（ID: ${info.id}）`;
     }
+  }
+
+  function renderLayoutInputs() {
+    if (!columnCountInput) return;
+    columnCountInput.value = layoutConfig.columns || "";
+  }
+
+  function readLayoutFromInput() {
+    const columns = toPositiveInt(columnCountInput?.value);
+    return { columns: columns && columns > 0 ? columns : 0 };
   }
 
   function renderFloorSelect() {
@@ -196,11 +239,22 @@ export function renderAreas(mount) {
     });
   }
 
+  function formatPlacement(area) {
+    if (!area) return "自動";
+    const col = area.gridColumn ? `列${area.gridColumn}` : "列: 自動";
+    const row = area.gridRow ? `行${area.gridRow}` : "行: 自動";
+    const span = [];
+    if (area.colSpan && area.colSpan > 1) span.push(`横${area.colSpan}`);
+    if (area.rowSpan && area.rowSpan > 1) span.push(`縦${area.rowSpan}`);
+    const spanText = span.length ? `（${span.join("・")}）` : "";
+    return `${col} / ${row}${spanText}`;
+  }
+
   function renderAreaRows() {
     areaRowsEl.innerHTML = "";
     if (!areas.length) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="4" class="hint">エリアが登録されていません。追加してください。</td>`;
+      tr.innerHTML = `<td colspan="5" class="hint">エリアが登録されていません。追加してください。</td>`;
       areaRowsEl.appendChild(tr);
       return;
     }
@@ -212,6 +266,7 @@ export function renderAreas(mount) {
         <td class="mono">${index + 1}</td>
         <td class="mono">${area.id}</td>
         <td>${area.label}</td>
+        <td class="mono">${formatPlacement(area)}</td>
         <td class="row-actions">
           <button type="button" class="button ghost" data-edit="${area.id}">編集</button>
           <button type="button" class="button ghost" data-up="${area.id}" ${upDisabled}>↑</button>
@@ -228,6 +283,10 @@ export function renderAreas(mount) {
         if (!target) return;
         areaForm.areaId.value = target.id;
         areaForm.label.value = target.label;
+        areaForm.gridColumn.value = target.gridColumn || "";
+        areaForm.gridRow.value = target.gridRow || "";
+        areaForm.colSpan.value = target.colSpan || "";
+        areaForm.rowSpan.value = target.rowSpan || "";
         areaForm.areaId.focus();
       });
     });
@@ -266,26 +325,38 @@ export function renderAreas(mount) {
 
   async function loadAreasForFloor(floorId) {
     if (!floorId || areaCache.has(floorId)) {
-      return areaCache.get(floorId) || [];
+      const payload = areaCache.get(floorId);
+      if (payload) return payload;
+      return { areas: [], layout: { columns: 0 } };
     }
     try {
-      const list = await getAreasOnce({
+      const payload = await getAreasOnce({
         userId: state.site.userId,
         siteId: state.site.siteId,
         floorId
       });
-      const normalized = (list || DEFAULT_AREAS)
+      const normalized = normalizeAreaPayload(payload);
+      const sortedAreas = (normalized.areas || DEFAULT_AREAS)
         .map((a, idx) => ({
           id: a.id || `Z${idx + 1}`,
           label: a.label || `エリア${idx + 1}`,
-          order: typeof a.order === "number" ? a.order : idx
+          order: typeof a.order === "number" ? a.order : idx,
+          gridColumn: a.gridColumn,
+          gridRow: a.gridRow,
+          colSpan: a.colSpan,
+          rowSpan: a.rowSpan
         }))
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      areaCache.set(floorId, normalized);
-      return normalized;
+      const payloadForCache = {
+        areas: sortedAreas.map((a, idx) => ({ ...a, order: idx })),
+        layout: normalized.layout
+      };
+      areaCache.set(floorId, payloadForCache);
+      layoutCache.set(floorId, payloadForCache.layout);
+      return payloadForCache;
     } catch (err) {
       console.error("loadAreasForFloor failed", err);
-      return [];
+      return { areas: [], layout: { columns: 0 } };
     }
   }
 
@@ -294,8 +365,8 @@ export function renderAreas(mount) {
     if (!targetId) return null;
     for (const floor of floors) {
       if (!floor?.id || floor.id === currentFloorId) continue;
-      const list = await loadAreasForFloor(floor.id);
-      if (list.some((a) => a.id === targetId)) {
+      const payload = await loadAreasForFloor(floor.id);
+      if ((payload.areas || []).some((a) => a.id === targetId)) {
         return floor;
       }
     }
@@ -309,7 +380,9 @@ export function renderAreas(mount) {
       console.warn("unsubAreas failed", err);
     }
     areas = [];
+    layoutConfig = normalizeLayoutConfig(layoutCache.get(currentFloorId) || {});
     renderAreaRows();
+    renderLayoutInputs();
     updateFloorHint();
     if (!currentFloorId) {
       return;
@@ -320,15 +393,24 @@ export function renderAreas(mount) {
         siteId: state.site.siteId,
         floorId: currentFloorId
       },
-      (list) => {
-        areas = (list || DEFAULT_AREAS)
+      (payload) => {
+        const { areas: fetchedAreas, layout } = normalizeAreaPayload(payload);
+        areas = (fetchedAreas || DEFAULT_AREAS)
           .map((a, idx) => ({
             id: a.id || `Z${idx + 1}`,
             label: a.label || `エリア${idx + 1}`,
-            order: typeof a.order === "number" ? a.order : idx
+            order: typeof a.order === "number" ? a.order : idx,
+            gridColumn: a.gridColumn,
+            gridRow: a.gridRow,
+            colSpan: a.colSpan,
+            rowSpan: a.rowSpan
           }))
-          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        areaCache.set(currentFloorId, areas.slice());
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .map((a, idx) => ({ ...a, order: idx }));
+        layoutConfig = normalizeLayoutConfig(layout);
+        areaCache.set(currentFloorId, { areas: areas.slice(), layout: layoutConfig });
+        layoutCache.set(currentFloorId, layoutConfig);
+        renderLayoutInputs();
         renderAreaRows();
       }
     );
@@ -346,6 +428,13 @@ export function renderAreas(mount) {
     renderFloorSelect();
     updateFloorHint();
     areaForm?.reset();
+    const cached = areaCache.get(currentFloorId);
+    if (cached) {
+      areas = (cached.areas || []).slice();
+      layoutConfig = normalizeLayoutConfig(cached.layout || {});
+      renderLayoutInputs();
+      renderAreaRows();
+    }
     subscribeAreasForFloor();
   }
 
@@ -393,19 +482,27 @@ export function renderAreas(mount) {
       toast("フロアを選択してください", "error");
       return;
     }
+    layoutConfig = readLayoutFromInput();
     areas = nextAreas.map((a, idx) => ({
       id: (a.id || "").trim(),
       label: (a.label || "").trim() || `エリア${idx + 1}`,
-      order: idx
+      order: idx,
+      gridColumn: toPositiveInt(a.gridColumn),
+      gridRow: toPositiveInt(a.gridRow),
+      colSpan: toPositiveInt(a.colSpan),
+      rowSpan: toPositiveInt(a.rowSpan)
     }));
-    areaCache.set(currentFloorId, areas.slice());
+    areaCache.set(currentFloorId, { areas: areas.slice(), layout: layoutConfig });
+    layoutCache.set(currentFloorId, layoutConfig);
+    renderLayoutInputs();
     renderAreaRows();
     try {
       await saveAreas({
         userId: state.site.userId,
         siteId: state.site.siteId,
         floorId: currentFloorId,
-        areas
+        areas,
+        layout: layoutConfig
       });
       toast(message || "エリアを保存しました");
     } catch (err) {
@@ -443,6 +540,10 @@ export function renderAreas(mount) {
     const fd = new FormData(areaForm);
     const areaId = (fd.get("areaId") || "").toString().trim();
     const label = (fd.get("label") || "").toString().trim();
+    const gridColumn = toPositiveInt(fd.get("gridColumn"));
+    const gridRow = toPositiveInt(fd.get("gridRow"));
+    const colSpan = toPositiveInt(fd.get("colSpan"));
+    const rowSpan = toPositiveInt(fd.get("rowSpan"));
     if (!areaId || !label) {
       toast("エリアIDと表示名を入力してください", "error");
       return;
@@ -457,9 +558,16 @@ export function renderAreas(mount) {
       }
     }
     if (index >= 0) {
-      next[index] = { ...next[index], label };
+      next[index] = {
+        ...next[index],
+        label,
+        gridColumn,
+        gridRow,
+        colSpan,
+        rowSpan
+      };
     } else {
-      next.push({ id: areaId, label });
+      next.push({ id: areaId, label, gridColumn, gridRow, colSpan, rowSpan });
     }
     await persistAreas(next, index >= 0 ? "エリアを更新しました" : "エリアを追加しました");
     areaForm.reset();
@@ -467,6 +575,10 @@ export function renderAreas(mount) {
 
   clearAreaBtn?.addEventListener("click", () => {
     areaForm.reset();
+  });
+
+  saveLayoutBtn?.addEventListener("click", async () => {
+    await persistAreas(areas.slice(), "配置設定を更新しました");
   });
 
   floorSelect?.addEventListener("change", (e) => {

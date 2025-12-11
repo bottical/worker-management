@@ -98,16 +98,17 @@ function normalizedDefaultFloors(defaultFloorId) {
   }));
 }
 
+function toPositiveInt(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
+}
+
 function normalizedDefaultAreas() {
   const provided = (ENV.defaultSite?.areas || []).filter(Boolean);
   const merged = provided.length ? provided : DEFAULT_AREAS;
   const seen = new Set();
   return merged
-    .map((a, idx) => ({
-      id: a.id || a.areaId || `Z${idx + 1}`,
-      label: a.label || a.name || a.id || `エリア${idx + 1}`,
-      order: typeof a.order === "number" ? a.order : idx
-    }))
+    .map((a, idx) => sanitizeAreaConfig(a, idx))
     .filter((a) => {
       if (!a.id || seen.has(a.id)) return false;
       seen.add(a.id);
@@ -115,15 +116,9 @@ function normalizedDefaultAreas() {
     })
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map((a, idx) => ({
-      id: a.id,
-      label: a.label,
+      ...a,
       order: typeof a.order === "number" ? a.order : idx
     }));
-}
-
-function toPositiveInt(value) {
-  const num = Number(value);
-  return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
 }
 
 function sanitizeAreaLayout(layout = {}) {

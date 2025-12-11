@@ -655,7 +655,9 @@ export function makeFloor(
         gridRow: toPositiveInt(a.gridRow || a.row),
         gridColumn: toPositiveInt(a.gridColumn || a.column),
         rowSpan: toPositiveInt(a.rowSpan || a.gridRowSpan),
-        colSpan: toPositiveInt(a.colSpan || a.gridColSpan)
+        colSpan: toPositiveInt(a.colSpan || a.gridColSpan),
+        columns: toPositiveInt(a.columns),
+        minWidth: toPositiveInt(a.minWidth)
       }))
       .filter((a) => a.id && a.id !== FALLBACK_AREA_ID)
       .sort((a, b) => {
@@ -704,6 +706,8 @@ export function makeFloor(
   }
 
   function getDropMinWidth(area) {
+    const explicit = toPositiveInt(area?.minWidth);
+    if (explicit) return explicit;
     const dropColumns = getDropColumns(area);
     const zoneBaseWidth = 260; // align with --zone-columns min width
     const minWidth = Math.floor(zoneBaseWidth / dropColumns);

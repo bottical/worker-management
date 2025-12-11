@@ -134,6 +134,8 @@ function sanitizeAreaLayout(layout = {}) {
 }
 
 function sanitizeAreaConfig(area, idx) {
+  const columns = toPositiveInt(area.columns);
+  const minWidth = toPositiveInt(area.minWidth);
   return {
     id: area.id || area.areaId || `Z${idx + 1}`,
     label: area.label || area.name || `エリア${area.id || idx + 1}`,
@@ -141,7 +143,9 @@ function sanitizeAreaConfig(area, idx) {
     gridRow: toPositiveInt(area.gridRow || area.row),
     gridColumn: toPositiveInt(area.gridColumn || area.column),
     rowSpan: toPositiveInt(area.rowSpan || area.gridRowSpan),
-    colSpan: toPositiveInt(area.colSpan || area.gridColSpan)
+    colSpan: toPositiveInt(area.colSpan || area.gridColSpan),
+    columns: columns || undefined,
+    minWidth: minWidth || undefined
   };
 }
 

@@ -144,8 +144,8 @@ function sanitizeAreaConfig(area, idx) {
     gridColumn: toPositiveInt(area.gridColumn || area.column),
     rowSpan: toPositiveInt(area.rowSpan || area.gridRowSpan),
     colSpan: toPositiveInt(area.colSpan || area.gridColSpan),
-    columns: columns || undefined,
-    minWidth: minWidth || undefined
+    columns: columns ?? null,
+    minWidth: minWidth ?? null
   };
 }
 

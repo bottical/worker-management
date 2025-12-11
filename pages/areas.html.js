@@ -47,6 +47,8 @@ export function renderAreas(mount) {
       <form id="areaForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:16px">
         <label>エリアID（例: A）<input name="areaId" required maxlength="20" /></label>
         <label>表示名（例: エリアA）<input name="label" required maxlength="40" /></label>
+        <label>列数（1=縦1列）<input name="columns" type="number" min="1" max="8" placeholder="2" /></label>
+        <label>カード最小幅（px）<input name="minWidth" type="number" min="80" placeholder="120" /></label>
         <label>列番号（1〜、未入力で自動）<input name="gridColumn" type="number" min="1" max="12" /></label>
         <label>行番号（1〜、未入力で自動）<input name="gridRow" type="number" min="1" max="12" /></label>
         <label>横幅（列数）<input name="colSpan" type="number" min="1" max="12" placeholder="1" /></label>
@@ -58,7 +60,7 @@ export function renderAreas(mount) {
       </form>
       <table class="table" style="margin-top:16px">
         <thead>
-          <tr><th>#</th><th>ID</th><th>表示名</th><th>配置</th><th>操作</th></tr>
+          <tr><th>#</th><th>ID</th><th>表示名</th><th>列数</th><th>配置</th><th>操作</th></tr>
         </thead>
         <tbody id="areaRows"></tbody>
       </table>
@@ -254,7 +256,7 @@ export function renderAreas(mount) {
     areaRowsEl.innerHTML = "";
     if (!areas.length) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="5" class="hint">エリアが登録されていません。追加してください。</td>`;
+      tr.innerHTML = `<td colspan="6" class="hint">エリアが登録されていません。追加してください。</td>`;
       areaRowsEl.appendChild(tr);
       return;
     }
@@ -266,6 +268,7 @@ export function renderAreas(mount) {
         <td class="mono">${index + 1}</td>
         <td class="mono">${area.id}</td>
         <td>${area.label}</td>
+        <td class="mono">${area.columns || "自動"}</td>
         <td class="mono">${formatPlacement(area)}</td>
         <td class="row-actions">
           <button type="button" class="button ghost" data-edit="${area.id}">編集</button>
@@ -283,6 +286,8 @@ export function renderAreas(mount) {
         if (!target) return;
         areaForm.areaId.value = target.id;
         areaForm.label.value = target.label;
+        areaForm.columns.value = target.columns || "";
+        areaForm.minWidth.value = target.minWidth || "";
         areaForm.gridColumn.value = target.gridColumn || "";
         areaForm.gridRow.value = target.gridRow || "";
         areaForm.colSpan.value = target.colSpan || "";
@@ -341,6 +346,8 @@ export function renderAreas(mount) {
           id: a.id || `Z${idx + 1}`,
           label: a.label || `エリア${idx + 1}`,
           order: typeof a.order === "number" ? a.order : idx,
+          columns: toPositiveInt(a.columns),
+          minWidth: toPositiveInt(a.minWidth),
           gridColumn: a.gridColumn,
           gridRow: a.gridRow,
           colSpan: a.colSpan,
@@ -400,6 +407,8 @@ export function renderAreas(mount) {
             id: a.id || `Z${idx + 1}`,
             label: a.label || `エリア${idx + 1}`,
             order: typeof a.order === "number" ? a.order : idx,
+            columns: toPositiveInt(a.columns),
+            minWidth: toPositiveInt(a.minWidth),
             gridColumn: a.gridColumn,
             gridRow: a.gridRow,
             colSpan: a.colSpan,
@@ -487,6 +496,8 @@ export function renderAreas(mount) {
       id: (a.id || "").trim(),
       label: (a.label || "").trim() || `エリア${idx + 1}`,
       order: idx,
+      columns: toPositiveInt(a.columns),
+      minWidth: toPositiveInt(a.minWidth),
       gridColumn: toPositiveInt(a.gridColumn),
       gridRow: toPositiveInt(a.gridRow),
       colSpan: toPositiveInt(a.colSpan),
@@ -540,6 +551,8 @@ export function renderAreas(mount) {
     const fd = new FormData(areaForm);
     const areaId = (fd.get("areaId") || "").toString().trim();
     const label = (fd.get("label") || "").toString().trim();
+    const columns = toPositiveInt(fd.get("columns"));
+    const minWidth = toPositiveInt(fd.get("minWidth"));
     const gridColumn = toPositiveInt(fd.get("gridColumn"));
     const gridRow = toPositiveInt(fd.get("gridRow"));
     const colSpan = toPositiveInt(fd.get("colSpan"));
@@ -561,13 +574,15 @@ export function renderAreas(mount) {
       next[index] = {
         ...next[index],
         label,
+        columns,
+        minWidth,
         gridColumn,
         gridRow,
         colSpan,
         rowSpan
       };
     } else {
-      next.push({ id: areaId, label, gridColumn, gridRow, colSpan, rowSpan });
+      next.push({ id: areaId, label, columns, minWidth, gridColumn, gridRow, colSpan, rowSpan });
     }
     await persistAreas(next, index >= 0 ? "エリアを更新しました" : "エリアを追加しました");
     areaForm.reset();

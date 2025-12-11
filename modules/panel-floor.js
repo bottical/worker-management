@@ -581,7 +581,7 @@ export function makeFloor(
       drop.className = "droparea";
       drop.dataset.areaId = area.id;
       drop.dataset.floorId = area.floorId || "";
-      drop.style.setProperty("--drop-columns", `${getDropColumns(area)}`);
+      applyDropLayout(drop, area);
       zone.appendChild(title);
       zone.appendChild(drop);
       zonesEl.appendChild(zone);
@@ -616,7 +616,7 @@ export function makeFloor(
     drop.dataset.areaId = FALLBACK_AREA_ID;
     drop.dataset.fallback = "true";
     drop.dataset.floorId = floorId || "";
-    drop.style.setProperty("--drop-columns", `${getDropColumns({ floorId })}`);
+    applyDropLayout(drop, { floorId });
     zone.appendChild(title);
     zone.appendChild(drop);
     zonesEl.appendChild(zone);
@@ -687,6 +687,19 @@ export function makeFloor(
     const layout = getLayoutForFloor(area?.floorId);
     const columns = toPositiveInt(layout?.columns);
     return columns || 2;
+  }
+
+  function getDropMinWidth(area) {
+    const dropColumns = getDropColumns(area);
+    const zoneBaseWidth = 260; // align with --zone-columns min width
+    const minWidth = Math.floor(zoneBaseWidth / dropColumns);
+    return Math.max(120, minWidth);
+  }
+
+  function applyDropLayout(dropEl, area) {
+    if (!dropEl) return;
+    dropEl.style.setProperty("--drop-columns", `${getDropColumns(area)}`);
+    dropEl.style.setProperty("--drop-min-width", `${getDropMinWidth(area)}px`);
   }
 
   function applyGridTemplate() {

@@ -715,7 +715,7 @@ export function makeFloor(
       ? `repeat(${columns}, minmax(260px, 1fr))`
       : "repeat(auto-fit,minmax(260px,1fr))";
     zonesEl.style.setProperty("--zone-columns", template);
-    const dropColumns = columns === 1 ? 1 : 2;
+    const dropColumns = columns || 2;
     zonesEl.style.setProperty("--drop-columns", `${dropColumns}`);
   }
 

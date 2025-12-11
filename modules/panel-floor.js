@@ -504,6 +504,10 @@ export function makeFloor(
         drop = ensureFallbackZone(floorId);
         activeFallbackFloors.add(floorId || "__none__");
       }
+      const areaMeta = _areas.find(
+        (a) => a.id === targetAreaId && (a.floorId || "") === (floorId || "")
+      );
+      applyDropLayout(drop, areaMeta || { floorId });
       if (!drop) return;
       sorted.forEach((r, idx) => {
         const order = typeof r.order === "number" ? r.order : idx;
@@ -597,6 +601,7 @@ export function makeFloor(
         `.droparea[data-area-id="${FALLBACK_AREA_ID}"]`
       );
       if (drop) {
+        applyDropLayout(drop, { floorId });
         drop.innerHTML = "";
         setupDropzone(drop);
         return drop;
@@ -683,9 +688,18 @@ export function makeFloor(
     return _layoutMap.get(floorId) || _layout || { columns: 0 };
   }
 
-  function getDropColumns(area) {
+  function extractDropColumns(area) {
+    const explicitColumns =
+      toPositiveInt(area?.dropColumns) ||
+      toPositiveInt(area?.dropLayout?.columns) ||
+      toPositiveInt(area?.columns);
+    if (explicitColumns) return explicitColumns;
     const layout = getLayoutForFloor(area?.floorId);
-    const columns = toPositiveInt(layout?.columns);
+    return toPositiveInt(layout?.columns);
+  }
+
+  function getDropColumns(area) {
+    const columns = extractDropColumns(area);
     return columns || 2;
   }
 

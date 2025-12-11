@@ -691,11 +691,13 @@ export function makeFloor(
   }
 
   function extractDropColumns(area) {
-    const explicitColumns =
-      toPositiveInt(area?.dropColumns) ||
-      toPositiveInt(area?.dropLayout?.columns) ||
-      toPositiveInt(area?.columns);
-    if (explicitColumns) return explicitColumns;
+    const areaColumns = toPositiveInt(area?.columns);
+    if (areaColumns) return areaColumns;
+
+    const legacyColumns =
+      toPositiveInt(area?.dropColumns) || toPositiveInt(area?.dropLayout?.columns);
+    if (legacyColumns) return legacyColumns;
+
     const layout = getLayoutForFloor(area?.floorId);
     return toPositiveInt(layout?.columns);
   }
@@ -710,6 +712,7 @@ export function makeFloor(
     if (explicit) return explicit;
     const dropColumns = getDropColumns(area);
     const zoneBaseWidth = 260; // align with --zone-columns min width
+    if (dropColumns <= 1) return zoneBaseWidth;
     const minWidth = Math.floor(zoneBaseWidth / dropColumns);
     return Math.max(120, minWidth);
   }

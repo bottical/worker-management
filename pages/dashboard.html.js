@@ -591,9 +591,7 @@ export function renderDashboard(mount) {
     const metaMap = getFloorLabelMap();
     const meta = metaMap.get(floorId) || { label: floorId || "", order: 0 };
     const { areas: targetAreas, layout } = normalizeAreaPayload(payload);
-    const list = Array.isArray(targetAreas) && targetAreas.length
-      ? targetAreas
-      : DEFAULT_AREAS;
+    const list = Array.isArray(targetAreas) ? targetAreas : [];
     const decoratedAreas = list.map((a, idx) => ({
       ...a,
       gridColumn: toPositiveInt(a.gridColumn || a.column),

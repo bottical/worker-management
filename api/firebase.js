@@ -32,6 +32,7 @@ export const DEFAULT_AREAS = [
 ];
 
 const DEFAULT_AREA_LAYOUT = { columns: 0 };
+const EMPTY_AREA_PAYLOAD = { areas: [], layout: { ...DEFAULT_AREA_LAYOUT } };
 
 export const DEFAULT_FLOORS = [
   { id: "1F", label: "1F", order: 0 }
@@ -146,6 +147,10 @@ function sanitizeAreaConfig(area, idx) {
 
 function defaultAreaPayload() {
   return { areas: normalizedDefaultAreas(), layout: { ...DEFAULT_AREA_LAYOUT } };
+}
+
+function fallbackAreaPayload(floorId) {
+  return floorId ? { ...EMPTY_AREA_PAYLOAD } : defaultAreaPayload();
 }
 
 function normalizeSkillSettings(settings = {}) {
@@ -557,11 +562,11 @@ export async function getAreasOnce({ userId, siteId, floorId }) {
   const ref = siteDocument(userId, siteId, "areaConfigs", areaDocId(siteId, floorId || ""));
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    return floorId ? defaultAreaPayload() : defaultAreaPayload();
+    return fallbackAreaPayload(floorId);
   }
   const data = snap.data();
   if (!Array.isArray(data?.areas)) {
-    return floorId ? defaultAreaPayload() : defaultAreaPayload();
+    return fallbackAreaPayload(floorId);
   }
   const layout = sanitizeAreaLayout(data.layout || {});
   const areas = data.areas
@@ -579,7 +584,7 @@ export function subscribeAreas({ userId, siteId, floorId }, cb) {
     ref,
     (snap) => {
       if (!snap.exists()) {
-        cb(defaultAreaPayload());
+        cb(fallbackAreaPayload(floorId));
       } else {
         const data = snap.data();
         const layout = sanitizeAreaLayout(data.layout || {});
@@ -589,13 +594,13 @@ export function subscribeAreas({ userId, siteId, floorId }, cb) {
               .filter((a) => a.id)
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
               .map((a, idx) => ({ ...a, order: typeof a.order === "number" ? a.order : idx }))
-          : defaultAreaPayload().areas;
+          : fallbackAreaPayload(floorId).areas;
         cb({ areas, layout });
       }
     },
     (err) => {
       console.error("subscribeAreas failed", err);
-      cb(defaultAreaPayload());
+      cb(fallbackAreaPayload(floorId));
     }
   );
 }

@@ -213,7 +213,8 @@ async function fetchCellRange({
   const values = rows.map((row) => {
     const cells = row?.c || [];
     const out = [];
-    for (let i = 0; i < columnCount; i++) {
+    const effectiveColumnCount = Math.max(columnCount, cells.length);
+    for (let i = 0; i < effectiveColumnCount; i++) {
       const cell = cells[i];
       let value = "";
       if (cell) {

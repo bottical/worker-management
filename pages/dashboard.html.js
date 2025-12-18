@@ -35,7 +35,7 @@ export function renderDashboard(mount) {
     return;
   }
   const wrap = document.createElement("div");
-  wrap.className = "grid twocol";
+  wrap.className = "grid twocol dashboard-grid";
   wrap.innerHTML = `
     <aside class="panel left dashboard-pool-panel">
       <h2>未配置（<span id="count">0</span>名）</h2>

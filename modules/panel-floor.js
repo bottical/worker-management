@@ -376,7 +376,7 @@ export function makeFloor(
     card.appendChild(right);
     card.appendChild(settingsBtn);
 
-    if (role === "mentor") {
+    if (role !== "mentee") {
       card.addEventListener("dragover", (e) => {
         if (_readOnly) return;
         const type = e.dataTransfer?.getData("type");

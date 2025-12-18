@@ -21,6 +21,10 @@ import { toast } from "../core/ui.js";
 import { normalizeSkillLevels } from "../modules/skill-layout.js";
 
 const ALL_FLOOR_VALUE = "__all__";
+const DEFAULT_FONT_SCALE = 1;
+const FONT_SCALE_KEY = "dashboardFontScale";
+const FONT_SCALE_MIN = 0.8;
+const FONT_SCALE_MAX = 1.2;
 
 export function renderDashboard(mount) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -56,6 +60,13 @@ export function renderDashboard(mount) {
       <span class="icon" aria-hidden="true">≡</span>
       <span class="label">未配置カラム</span>
     </button>
+    <label>文字サイズ
+      <select id="fontScale">
+        <option value="0.9">小</option>
+        <option value="1">標準</option>
+        <option value="1.1">大</option>
+      </select>
+    </label>
     <div id="viewMode" class="hint"></div>
   `;
   mount.appendChild(toolbar);
@@ -68,6 +79,36 @@ export function renderDashboard(mount) {
   const floorSelect = toolbar.querySelector("#floorSelect");
   const fallbackToggle = toolbar.querySelector("#toggleFallback");
   const viewModeEl = toolbar.querySelector("#viewMode");
+  const fontScaleSelect = toolbar.querySelector("#fontScale");
+
+  function normalizeFontScale(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return DEFAULT_FONT_SCALE;
+    const clamped = Math.min(Math.max(num, FONT_SCALE_MIN), FONT_SCALE_MAX);
+    return Math.round(clamped * 100) / 100;
+  }
+
+  function readFontScale() {
+    if (typeof localStorage === "undefined") return DEFAULT_FONT_SCALE;
+    const stored = Number(localStorage.getItem(FONT_SCALE_KEY));
+    return normalizeFontScale(Number.isFinite(stored) ? stored : DEFAULT_FONT_SCALE);
+  }
+
+  function applyFontScale(scale) {
+    const normalized = normalizeFontScale(scale);
+    wrap.style.setProperty("--dashboard-font-scale", normalized);
+    if (fontScaleSelect) {
+      fontScaleSelect.value = normalized.toString();
+    }
+    return normalized;
+  }
+
+  function persistFontScale(scale) {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(FONT_SCALE_KEY, String(scale));
+  }
+
+  applyFontScale(readFontScale());
 
   function toWorkerMaster(row) {
     if (!row) return null;
@@ -755,6 +796,13 @@ export function renderDashboard(mount) {
     dateInput.addEventListener("change", (e) => {
       const val = e.target.value || todayStr;
       loadAssignmentsForDate(val);
+    });
+  }
+
+  if (fontScaleSelect) {
+    fontScaleSelect.addEventListener("change", (e) => {
+      const applied = applyFontScale(e.target.value);
+      persistFontScale(applied);
     });
   }
 

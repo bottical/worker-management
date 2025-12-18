@@ -86,8 +86,14 @@ export function makeFloor(
     return sortAssignments(grouped.get(key) || []);
   }
 
+  function listSlots(dropEl) {
+    return Array.from(dropEl?.querySelectorAll(".slot") || []).filter(
+      (slot) => !slot.classList.contains("placeholder-slot")
+    );
+  }
+
   function findInsertIndex(dropEl, clientY) {
-    const slots = Array.from(dropEl?.querySelectorAll(".slot") || []);
+    const slots = listSlots(dropEl);
     if (!slots.length) return 0;
     for (let i = 0; i < slots.length; i += 1) {
       const rect = slots[i].getBoundingClientRect();
@@ -96,6 +102,50 @@ export function makeFloor(
       }
     }
     return slots.length;
+  }
+
+  const placeholderSlots = new WeakMap();
+  let activePlaceholderDrop = null;
+
+  function ensurePlaceholder(dropEl) {
+    if (!placeholderSlots.has(dropEl)) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "slot placeholder-slot";
+      placeholderSlots.set(dropEl, placeholder);
+    }
+    return placeholderSlots.get(dropEl);
+  }
+
+  function removePlaceholder(dropEl) {
+    const placeholder = placeholderSlots.get(dropEl);
+    if (placeholder?.parentElement === dropEl) {
+      dropEl.removeChild(placeholder);
+    }
+    if (activePlaceholderDrop === dropEl) {
+      activePlaceholderDrop = null;
+    }
+  }
+
+  function clearActivePlaceholder() {
+    if (activePlaceholderDrop) {
+      removePlaceholder(activePlaceholderDrop);
+    }
+  }
+
+  function showPlaceholder(dropEl, index) {
+    const placeholder = ensurePlaceholder(dropEl);
+    if (activePlaceholderDrop && activePlaceholderDrop !== dropEl) {
+      removePlaceholder(activePlaceholderDrop);
+    }
+    const slots = listSlots(dropEl);
+    const bounded = Math.max(0, Math.min(index, slots.length));
+    const anchor = slots[bounded] || null;
+    if (placeholder.parentElement !== dropEl) {
+      dropEl.insertBefore(placeholder, anchor);
+    } else if (placeholder !== anchor?.previousSibling) {
+      dropEl.insertBefore(placeholder, anchor);
+    }
+    activePlaceholderDrop = dropEl;
   }
 
   async function persistOrders(updates, onErrorMessage = "並び順の更新に失敗しました") {
@@ -283,6 +333,7 @@ export function makeFloor(
       const assignmentId = card.dataset.assignmentId;
       const state = dragStates.get(assignmentId);
       dragStates.delete(assignmentId);
+      clearActivePlaceholder();
       const dropEffect = e.dataTransfer?.dropEffect;
       const droppedOutside = !state?.handled && dropEffect !== "move";
       if (_readOnly || !droppedOutside) return;
@@ -316,9 +367,14 @@ export function makeFloor(
       if (_readOnly) return;
       e.preventDefault();
       zone?.classList.add("dragover");
+      const insertIndex = findInsertIndex(drop, e.clientY);
+      showPlaceholder(drop, insertIndex);
     });
-    drop.addEventListener("dragleave", () => {
-      zone?.classList.remove("dragover");
+    drop.addEventListener("dragleave", (e) => {
+      if (!drop.contains(e.relatedTarget)) {
+        removePlaceholder(drop);
+        zone?.classList.remove("dragover");
+      }
     });
     drop.addEventListener("drop", async (e) => {
       zone?.classList.remove("dragover");
@@ -326,6 +382,7 @@ export function makeFloor(
         e.preventDefault();
         return;
       }
+      clearActivePlaceholder();
       e.preventDefault();
       const type = e.dataTransfer.getData("type");
       const areaId = drop.dataset.areaId;

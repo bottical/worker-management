@@ -382,17 +382,24 @@ export function makeFloor(
     card.appendChild(settingsBtn);
 
     if (role !== "mentee") {
+      const isDraggingPlaced = () => {
+        const dragging = document.querySelector(".card.dragging");
+        if (!dragging) return false;
+        if (dragging.classList.contains("placed-card")) return true;
+        if (dragging.classList.contains("mentee-card")) return true;
+        if (dragging.dataset?.type === "placed") return true;
+        return false;
+      };
+
       card.addEventListener("dragenter", (e) => {
         if (_readOnly) return;
-        const type = e.dataTransfer?.getData("type");
-        if (type !== "placed") return;
+        if (!isDraggingPlaced()) return;
         e.preventDefault();
         card.classList.add("mentor-drop-target");
       });
       card.addEventListener("dragover", (e) => {
         if (_readOnly) return;
-        const type = e.dataTransfer?.getData("type");
-        if (type !== "placed") return;
+        if (!isDraggingPlaced()) return;
         e.preventDefault();
         card.classList.add("mentor-drop-target");
       });
@@ -404,8 +411,6 @@ export function makeFloor(
       card.addEventListener("drop", (e) => {
         card.classList.remove("mentor-drop-target");
         if (_readOnly) return;
-        const type = e.dataTransfer?.getData("type");
-        if (type !== "placed") return;
         const menteeId = e.dataTransfer.getData("workerId");
         const fromArea = normalizeAreaId(e.dataTransfer.getData("fromAreaId"));
         const fromFloor = e.dataTransfer.getData("fromFloorId") || "";
@@ -517,17 +522,21 @@ export function makeFloor(
         e.preventDefault();
         return;
       }
+      card.classList.add("dragging");
+      const { dataTransfer } = e;
       dragStates.set(card.dataset.assignmentId, { handled: false });
-      if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = "move";
+      if (dataTransfer) {
+        dataTransfer.effectAllowed = "move";
+        dataTransfer.setData("type", "placed");
+        dataTransfer.setData("workerId", card.dataset.workerId);
+        dataTransfer.setData("assignmentId", card.dataset.assignmentId);
+        dataTransfer.setData("fromAreaId", card.dataset.areaId);
+        dataTransfer.setData("fromFloorId", card.dataset.floorId || "");
+        dataTransfer.setData("text/plain", "placed");
       }
-      e.dataTransfer.setData("type", "placed");
-      e.dataTransfer.setData("workerId", card.dataset.workerId);
-      e.dataTransfer.setData("assignmentId", card.dataset.assignmentId);
-      e.dataTransfer.setData("fromAreaId", card.dataset.areaId);
-      e.dataTransfer.setData("fromFloorId", card.dataset.floorId || "");
     });
     card.addEventListener("dragend", async (e) => {
+      card.classList.remove("dragging");
       const assignmentId = card.dataset.assignmentId;
       const state = dragStates.get(assignmentId);
       dragStates.delete(assignmentId);

@@ -382,6 +382,13 @@ export function makeFloor(
     card.appendChild(settingsBtn);
 
     if (role !== "mentee") {
+      card.addEventListener("dragenter", (e) => {
+        if (_readOnly) return;
+        const type = e.dataTransfer?.getData("type");
+        if (type !== "placed") return;
+        e.preventDefault();
+        card.classList.add("mentor-drop-target");
+      });
       card.addEventListener("dragover", (e) => {
         if (_readOnly) return;
         const type = e.dataTransfer?.getData("type");
@@ -389,7 +396,9 @@ export function makeFloor(
         e.preventDefault();
         card.classList.add("mentor-drop-target");
       });
-      card.addEventListener("dragleave", () => {
+      card.addEventListener("dragleave", (e) => {
+        // 子要素間の移動では外さない
+        if (card.contains(e.relatedTarget)) return;
         card.classList.remove("mentor-drop-target");
       });
       card.addEventListener("drop", (e) => {

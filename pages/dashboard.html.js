@@ -23,7 +23,7 @@ import { normalizeSkillLevels } from "../modules/skill-layout.js";
 const ALL_FLOOR_VALUE = "__all__";
 const DEFAULT_FONT_SCALE = 1;
 const FONT_SCALE_KEY = "dashboardFontScale";
-const FONT_SCALE_MIN = 0.7;
+const FONT_SCALE_MIN = 0.5;
 const FONT_SCALE_MAX = 1.2;
 
 export function renderDashboard(mount) {

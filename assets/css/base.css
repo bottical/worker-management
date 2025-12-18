@@ -32,6 +32,17 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card:hover .card-action{opacity:1;visibility:visible;pointer-events:auto}
 .card-action:hover{background:#e2e8f0;color:var(--ink)}
 .card-body{display:flex;flex-direction:column;gap:6px;padding:10px}
+.card-badges{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;line-height:1.2;border:1px solid var(--border);background:#f8fafc;color:var(--ink)}
+.badge-mentor{background:#2563eb;color:#fff;border-color:#1d4ed8}
+.badge-mentee{background:#e2e8f0;color:var(--ink)}
+.mentor-card .card-name{font-weight:900}
+.mentee-card{font-size:0.9em}
+.mentee-card .card-body{padding-left:18px;border-left:3px solid var(--border)}
+.mentee-mentor-label{color:var(--muted);font-size:11px}
+.mentee-detach{border:1px solid var(--border);background:#fff;color:var(--muted);border-radius:8px;padding:2px 6px;font-size:11px;cursor:pointer}
+.mentee-detach:hover{background:#fee2e2;color:#b91c1c}
+.mentor-drop-target{outline:3px dashed var(--accent);outline-offset:-4px}
 .card-header{display:flex;align-items:center;gap:8px;justify-content:center}
 .card-name{font-weight:1000;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;flex:0 1 auto;font-size:1.35em;line-height:1.2}
 .employment-count{display:flex;align-items:flex-end;gap:3px;font-size:calc(12px * var(--dashboard-font-scale,1));color:var(--muted);justify-content:flex-end}

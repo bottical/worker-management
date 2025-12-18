@@ -143,7 +143,15 @@ export function renderDashboard(mount) {
   function toRosterEntry(row, floorId = "") {
     if (!row) return null;
     if (typeof row === "string") {
-      return { workerId: row, name: row, areaId: "", floorId, isLeader: false };
+      return {
+        workerId: row,
+        name: row,
+        areaId: "",
+        floorId,
+        isLeader: false,
+        mentorId: "",
+        groupOrder: 0
+      };
     }
     const workerId = row.workerId || "";
     if (!workerId) return null;
@@ -152,7 +160,9 @@ export function renderDashboard(mount) {
       name: row.name || workerId,
       areaId: row.areaId || "",
       floorId: row.floorId || floorId || "",
-      isLeader: Boolean(row.isLeader)
+      isLeader: Boolean(row.isLeader),
+      mentorId: row.mentorId || "",
+      groupOrder: typeof row.groupOrder === "number" ? row.groupOrder : 0
     };
   }
 
@@ -251,6 +261,85 @@ export function renderDashboard(mount) {
     return Boolean(roster?.isLeader);
   }
 
+  function buildMentorshipMap() {
+    const map = new Map();
+    rosterEntries.forEach((entry) => {
+      if (!entry?.workerId) return;
+      map.set(entry.workerId, {
+        mentorId: entry.mentorId || "",
+        groupOrder: typeof entry.groupOrder === "number" ? entry.groupOrder : 0,
+        areaId: entry.areaId || "",
+        floorId: entry.floorId || ""
+      });
+    });
+    return map;
+  }
+
+  function resolveRosterEntry(workerId, areaId = "", floorId = "") {
+    if (!workerId) return null;
+    const existing = rosterEntries.get(workerId);
+    if (existing) return existing;
+    const master = workerMap.get(workerId) || masterWorkerLookup.get(workerId) || {};
+    return {
+      workerId,
+      name: master.name || workerId,
+      areaId: areaId || "",
+      floorId,
+      isLeader: Boolean(getLeaderFlag(workerId)),
+      mentorId: "",
+      groupOrder: 0
+    };
+  }
+
+  async function handleMentorshipChange({
+    workerId,
+    mentorId = "",
+    areaId = "",
+    floorId = "",
+    groupOrder = 0
+  }) {
+    if (!workerId) return false;
+    if (isReadOnly) {
+      toast("過去日は編集できません", "error");
+      return false;
+    }
+    if (!state.site?.userId || !state.site?.siteId) {
+      toast("サイト情報が不足しているため保存できません", "error");
+      return false;
+    }
+    const resolvedFloorId = floorId || state.site.floorId || floorList?.[0]?.id || "";
+    const resolvedAreaId = areaId || rosterEntries.get(workerId)?.areaId || "";
+    const current = resolveRosterEntry(workerId, resolvedAreaId, resolvedFloorId);
+    if (!current) return false;
+    const nextEntry = {
+      ...current,
+      mentorId: mentorId || "",
+      groupOrder: typeof groupOrder === "number" ? groupOrder : 0,
+      areaId: resolvedAreaId,
+      floorId: resolvedFloorId
+    };
+    rosterEntries.set(workerId, nextEntry);
+    const rosterByFloor = Array.from(rosterEntries.values()).filter(
+      (entry) => (entry.floorId || "") === resolvedFloorId
+    );
+    try {
+      await saveDailyRoster({
+        userId: state.site.userId,
+        siteId: state.site.siteId,
+        floorId: resolvedFloorId,
+        date: selectedDate,
+        workers: rosterByFloor
+      });
+      floorApi.setMentorshipMap(buildMentorshipMap());
+      reconcile();
+      return true;
+    } catch (err) {
+      console.error("[Dashboard] failed to save mentorship", err);
+      toast("教育関係の保存に失敗しました", "error");
+      return false;
+    }
+  }
+
   // フロア初期化
   const floorApi = makeFloor(
     floorEl,
@@ -260,7 +349,8 @@ export function renderDashboard(mount) {
     {
       onEditWorker: openWorkerEditor,
       getLeaderFlag,
-      skillSettings
+      skillSettings,
+      onMentorshipChange: handleMentorshipChange
     }
   );
   makePool(poolEl, state.site);
@@ -364,6 +454,7 @@ export function renderDashboard(mount) {
     workerMap = buildWorkerMap();
     // フロア（在籍）更新
     floorApi.setWorkerMap(workerMap);
+    floorApi.setMentorshipMap(buildMentorshipMap());
     const isAllFloorsView = state.site.floorId === ALL_FLOOR_VALUE;
     const currentFloorId = isAllFloorsView ? "" : state.site.floorId;
     const assignmentsForView = isAllFloorsView
@@ -915,7 +1006,11 @@ export function renderDashboard(mount) {
         name: workerName || currentWorkerId,
         areaId: existingRoster.areaId || assignment?.areaId || "",
         floorId: resolvedFloorId,
-        isLeader: isLeaderFlag
+        isLeader: isLeaderFlag,
+        mentorId: existingRoster.mentorId || "",
+        groupOrder: typeof existingRoster.groupOrder === "number"
+          ? existingRoster.groupOrder
+          : 0
       });
       const rosterByFloor = Array.from(rosterEntries.values()).filter(
         (entry) => (entry.floorId || "") === resolvedFloorId

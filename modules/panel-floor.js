@@ -319,6 +319,11 @@ export function makeFloor(
     card.dataset.floorId = floorId || "";
     card.setAttribute("draggable", "true");
 
+    if (!_readOnly && role !== "mentee") {
+      card.dataset.educationHint = "他の作業員をこのカードにドロップすると教育者に設定されます";
+      card.title = "他の作業員をドラッグ＆ドロップで教育者に設定";
+    }
+
     applyAccent(card, info.panelColor);
 
     const { left, right } = createSkillColumns(
@@ -758,9 +763,7 @@ export function makeFloor(
     const hasMentees = (mentorId) =>
       (menteesByMentor.get(mentorId) || []).length > 0;
 
-    const mentors = decorated
-      .filter((row) => hasMentees(row.workerId) && !row.mentorship.mentorId)
-      .sort((a, b) => a.baseOrder - b.baseOrder);
+    const sortedByBase = decorated.slice().sort((a, b) => a.baseOrder - b.baseOrder);
     const rendered = new Set();
     const result = [];
     const sortMentees = (list = []) => {
@@ -770,25 +773,35 @@ export function makeFloor(
         return a.baseOrder - b.baseOrder;
       });
     };
-    mentors.forEach((mentor) => {
-      result.push({ ...mentor, _role: "mentor" });
-      rendered.add(mentor.workerId);
-      const mentees = sortMentees(menteesByMentor.get(mentor.workerId) || []);
-      mentees.forEach((row) => {
-        if (rendered.has(row.workerId)) return;
-        rendered.add(row.workerId);
-        result.push({
-          ...row,
-          _role: "mentee",
-          _mentorId: mentor.workerId,
-          _mentorName: getWorkerInfo(mentor.workerId).name
-        });
-      });
-    });
-    decorated.forEach((row) => {
+    sortedByBase.forEach((row) => {
       if (rendered.has(row.workerId)) return;
+      const mentorId = row.mentorship.mentorId;
+      if (hasMentees(row.workerId) && !mentorId) {
+        result.push({ ...row, _role: "mentor" });
+        rendered.add(row.workerId);
+        const mentees = sortMentees(menteesByMentor.get(row.workerId) || []);
+        mentees.forEach((mentee) => {
+          if (rendered.has(mentee.workerId)) return;
+          rendered.add(mentee.workerId);
+          result.push({
+            ...mentee,
+            _role: "mentee",
+            _mentorId: row.workerId,
+            _mentorName: getWorkerInfo(row.workerId).name
+          });
+        });
+        return;
+      }
+      if (mentorId && idSet.has(mentorId) && !rendered.has(mentorId)) {
+        return;
+      }
       rendered.add(row.workerId);
-      result.push({ ...row, _role: "solo" });
+      result.push({
+        ...row,
+        _role: mentorId ? "mentee" : "solo",
+        _mentorId: mentorId,
+        _mentorName: mentorId ? getWorkerInfo(mentorId).name : ""
+      });
     });
     return result;
   }

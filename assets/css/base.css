@@ -44,6 +44,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .mentee-detach:hover{background:#fee2e2;color:#b91c1c}
 .mentor-drop-target{outline:3px dashed var(--accent);outline-offset:-4px;position:relative}
 .mentor-drop-target::after{content:"被教育者として紐付け";position:absolute;inset:8px;background:rgba(37,99,235,0.08);border:1px dashed var(--accent);border-radius:10px;color:var(--accent);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;text-align:center;pointer-events:none;padding:6px}
+.card[data-education-hint]:not(.readonly):hover{box-shadow:0 6px 14px rgba(37,99,235,0.18)}
+.card[data-education-hint]:not(.readonly):hover::after{content:attr(data-education-hint);position:absolute;left:12px;right:12px;bottom:12px;z-index:2;background:rgba(37,99,235,0.92);color:#fff;font-size:12px;line-height:1.4;padding:8px 10px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.18)}
 .card-header{display:flex;align-items:center;gap:8px;justify-content:center}
 .card-name{font-weight:1000;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;flex:0 1 auto;font-size:1.35em;line-height:1.2}
 .employment-count{display:flex;align-items:flex-end;gap:3px;font-size:calc(12px * var(--dashboard-font-scale,1));color:var(--muted);justify-content:flex-end}

@@ -755,8 +755,11 @@ export function makeFloor(
       }
       menteesByMentor.get(mentorId).push(row);
     });
+    const hasMentees = (mentorId) =>
+      (menteesByMentor.get(mentorId) || []).length > 0;
+
     const mentors = decorated
-      .filter((row) => !row.mentorship.mentorId)
+      .filter((row) => hasMentees(row.workerId) && !row.mentorship.mentorId)
       .sort((a, b) => a.baseOrder - b.baseOrder);
     const rendered = new Set();
     const result = [];

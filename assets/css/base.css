@@ -55,6 +55,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .zone.dragover{outline:3px dashed var(--accent);outline-offset:-6px}
 .droparea{display:grid;grid-template-columns:repeat(var(--drop-columns,2), minmax(var(--drop-min-width,120px), 1fr));gap:8px;min-height:160px}
 .slot{background:#fff;border:1px dashed var(--border);border-radius:12px;min-height:46px;display:flex;align-items:stretch;justify-content:stretch;color:var(--muted)}
+.slot.placeholder-slot{border:2px dotted var(--accent);background:#eff6ff;color:transparent}
 .slot > .card{width:100%;height:100%}
 .button{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--accent);color:#fff;cursor:pointer}
 .button.small{padding:6px 10px;font-size:12px}

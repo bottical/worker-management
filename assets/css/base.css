@@ -12,13 +12,13 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
 .grid{display:grid;gap:12px}
 .twocol{grid-template-columns:320px 1fr;align-items:start}
-.dashboard-grid{grid-template-columns:192px 1fr;width:100%;max-width:60vw;--dashboard-font-scale:1}
+.dashboard-grid{grid-template-columns:192px 1fr;width:100%;--dashboard-font-scale:1}
 .dashboard-grid .card{font-size:calc(14px * var(--dashboard-font-scale,1))}
 .left{border:1px solid var(--border)}
 .right{border:1px solid var(--border)}
 .hint{font-size:12px;color:var(--muted)}
 .cards{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px;align-content:start;align-items:start}
-.card{position:relative;display:grid;grid-template-columns:minmax(30px,72px) 1fr minmax(30px,72px);align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden}
+.card{position:relative;display:grid;grid-template-columns:minmax(24px,64px) 1fr minmax(24px,64px);align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden}
 .card.pool-card{grid-template-columns:minmax(16px,48px) 1fr minmax(16px,48px);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.03);font-size:calc(12px * var(--dashboard-font-scale,1))}
 .card.pool-card .card-body{padding:8px;gap:4px}
 .card.pool-card .card-name{font-size:1.1em}
@@ -31,12 +31,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card-action{position:absolute;top:6px;right:6px;border:1px solid var(--border);background:#f8fafc;color:var(--muted);border-radius:8px;padding:4px 6px;font-size:12px;cursor:pointer;line-height:1;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility .15s ease}
 .card:hover .card-action{opacity:1;visibility:visible;pointer-events:auto}
 .card-action:hover{background:#e2e8f0;color:var(--ink)}
-.card-body{display:flex;flex-direction:column;gap:8px;padding:12px}
+.card-body{display:flex;flex-direction:column;gap:6px;padding:10px}
 .card-header{display:flex;align-items:center;gap:8px;justify-content:center}
-.card-name{font-weight:1000;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;flex:0 1 auto;font-size:1.5em;line-height:1.2}
+.card-name{font-weight:1000;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;flex:0 1 auto;font-size:1.35em;line-height:1.2}
 .employment-count{display:flex;align-items:flex-end;gap:3px;font-size:calc(12px * var(--dashboard-font-scale,1));color:var(--muted);justify-content:flex-end}
 .employment-count .count{font-size:calc(18px * var(--dashboard-font-scale,1));font-weight:700;color:var(--ink)}
-.card-time{align-self:center;padding:6px 12px;border-radius:10px;background:#fef3c7;color:#92400e;border:1px solid var(--border);font-weight:700;text-align:center}
+.card-time{align-self:center;padding:4px 10px;border-radius:10px;background:#fef3c7;color:#92400e;border:1px solid var(--border);font-weight:700;text-align:center}
 .card-location{color:var(--muted)}
 .card-meta-row{display:flex;align-items:center;gap:10px}
 .card-meta-row .card-memo{flex:1 1 0}
@@ -45,7 +45,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .skill-column-group.left{border-radius:12px 0 0 12px;overflow:hidden}
 .skill-column-group.right{border-radius:0 12px 12px 0;overflow:hidden}
 .skill-column{display:flex;flex-direction:column;gap:0;align-items:stretch;justify-content:stretch;height:100%}
-.skill-indicator{flex:1 1 0;min-height:32px;width:100%;border:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:0;position:relative;background:transparent;transition:.15s;margin:0}
+.skill-indicator{flex:1 1 0;min-height:26px;width:100%;border:0;border-radius:0;display:flex;align-items:center;justify-content:center;padding:0;position:relative;background:transparent;transition:.15s;margin:0}
 .skill-indicator[data-level="mid"],.skill-indicator[data-level="high"]{background:var(--skill-color);color:var(--card-accent-text,var(--ink))}
 .skill-indicator[data-level="high"]::before{content:"";position:absolute;top:12px;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;background:#0f172a;box-shadow:0 0 0 2px #fff}
 .leader-mark{color:#ef4444;margin-left:6px;font-size:14px}
@@ -54,7 +54,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .zone h3{margin:0 0 8px 0;font-size:13px;color:var(--muted)}
 .zone.dragover{outline:3px dashed var(--accent);outline-offset:-6px}
 .droparea{display:grid;grid-template-columns:repeat(var(--drop-columns,2), minmax(var(--drop-min-width,120px), 1fr));gap:8px;min-height:160px}
-.slot{background:#fff;border:1px dashed var(--border);border-radius:12px;min-height:52px;display:flex;align-items:stretch;justify-content:stretch;color:var(--muted)}
+.slot{background:#fff;border:1px dashed var(--border);border-radius:12px;min-height:46px;display:flex;align-items:stretch;justify-content:stretch;color:var(--muted)}
 .slot > .card{width:100%;height:100%}
 .button{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--accent);color:#fff;cursor:pointer}
 .button.small{padding:6px 10px;font-size:12px}
@@ -84,6 +84,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .dashboard-pool-panel #pool{flex:1;overflow-y:auto;padding-right:4px}
 .grid.pool-hidden{grid-template-columns:1fr}
 .pool-hidden .dashboard-pool-panel{display:none}
+@media (max-width: 960px){
+  .dashboard-grid{grid-template-columns:1fr}
+  .dashboard-grid .panel{width:100%}
+}
 .loading-indicator{display:none;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .loading-indicator.active{display:inline-flex}
 .loading-indicator .spinner{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:spin 0.9s linear infinite}

@@ -37,7 +37,8 @@ export function makeFloor(
   let _showFallback = true;
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
-  const { onEditWorker, getLeaderFlag } = options;
+  let mentorshipMap = new Map();
+  const { onEditWorker, getLeaderFlag, onMentorshipChange } = options;
 
   function toPositiveInt(value) {
     const num = Number(value);
@@ -188,6 +189,52 @@ export function makeFloor(
     };
   }
 
+  function getMentorship(workerId) {
+    const info = mentorshipMap.get(workerId) || {};
+    return {
+      mentorId: info.mentorId || "",
+      groupOrder: typeof info.groupOrder === "number" ? info.groupOrder : 0,
+      areaId: info.areaId || "",
+      floorId: info.floorId || ""
+    };
+  }
+
+  function getMenteesInArea(mentorId, areaId, floorId) {
+    const normalizedArea = normalizeAreaId(areaId);
+    const normalizedFloor = floorId || "";
+    return currentAssignments.filter((row) => {
+      const meta = getMentorship(row.workerId);
+      return (
+        meta.mentorId === mentorId &&
+        normalizeAreaId(meta.areaId || row.areaId) === normalizedArea &&
+        (meta.floorId || row.floorId || "") === normalizedFloor
+      );
+    });
+  }
+
+  function wouldCreateCycle(workerId, mentorId) {
+    if (!workerId || !mentorId) return false;
+    let current = mentorId;
+    const visited = new Set([workerId]);
+    while (current) {
+      if (visited.has(current)) return true;
+      visited.add(current);
+      const next = getMentorship(current).mentorId;
+      if (!next) break;
+      current = next;
+    }
+    return false;
+  }
+
+  function getNextGroupOrder(mentorId, areaId, floorId) {
+    const mentees = getMenteesInArea(mentorId, areaId, floorId);
+    if (!mentees.length) return 0;
+    const maxOrder = Math.max(
+      ...mentees.map((row) => getMentorship(row.workerId).groupOrder || 0)
+    );
+    return maxOrder + 1;
+  }
+
   function applyAccent(cardEl, color) {
     if (!cardEl) return;
     if (color) {
@@ -252,9 +299,19 @@ export function makeFloor(
     return body;
   }
 
-  function createPlacedCard(info, workerId, areaId, assignmentId, floorId) {
+  function createPlacedCard(
+    info,
+    workerId,
+    areaId,
+    assignmentId,
+    floorId,
+    meta = {}
+  ) {
+    const { role = "solo", mentorName = "", onDetach = null } = meta;
     const card = document.createElement("div");
     card.className = "card";
+    if (role === "mentee") card.classList.add("mentee-card");
+    if (role === "mentor") card.classList.add("mentor-card");
     card.dataset.type = "placed";
     card.dataset.assignmentId = assignmentId;
     card.dataset.workerId = workerId;
@@ -270,6 +327,43 @@ export function makeFloor(
     );
     const body = buildCardBody(info, areaId, floorId);
 
+    const badgeRow = document.createElement("div");
+    badgeRow.className = "card-badges";
+    if (role === "mentor") {
+      const mentorBadge = document.createElement("span");
+      mentorBadge.className = "badge badge-mentor";
+      mentorBadge.textContent = "教育者";
+      badgeRow.appendChild(mentorBadge);
+    }
+    if (role === "mentee") {
+      const menteeBadge = document.createElement("span");
+      menteeBadge.className = "badge badge-mentee";
+      menteeBadge.textContent = "被教育者";
+      badgeRow.appendChild(menteeBadge);
+      if (mentorName) {
+        const label = document.createElement("span");
+        label.className = "mentee-mentor-label";
+        label.textContent = mentorName;
+        badgeRow.appendChild(label);
+      }
+      if (typeof onDetach === "function") {
+        const detach = document.createElement("button");
+        detach.type = "button";
+        detach.className = "mentee-detach";
+        detach.title = "教育関係を解除";
+        detach.textContent = "×";
+        detach.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDetach();
+        });
+        badgeRow.appendChild(detach);
+      }
+    }
+    if (badgeRow.children.length) {
+      body.insertBefore(badgeRow, body.firstChild);
+    }
+
     const settingsBtn = document.createElement("button");
     settingsBtn.type = "button";
     settingsBtn.className = "card-action";
@@ -281,6 +375,53 @@ export function makeFloor(
     card.appendChild(body);
     card.appendChild(right);
     card.appendChild(settingsBtn);
+
+    if (role === "mentor") {
+      card.addEventListener("dragover", (e) => {
+        if (_readOnly) return;
+        const type = e.dataTransfer?.getData("type");
+        if (type !== "placed") return;
+        e.preventDefault();
+        card.classList.add("mentor-drop-target");
+      });
+      card.addEventListener("dragleave", () => {
+        card.classList.remove("mentor-drop-target");
+      });
+      card.addEventListener("drop", (e) => {
+        card.classList.remove("mentor-drop-target");
+        if (_readOnly) return;
+        const type = e.dataTransfer?.getData("type");
+        if (type !== "placed") return;
+        const menteeId = e.dataTransfer.getData("workerId");
+        const fromArea = normalizeAreaId(e.dataTransfer.getData("fromAreaId"));
+        const fromFloor = e.dataTransfer.getData("fromFloorId") || "";
+        const targetArea = normalizeAreaId(areaId);
+        const targetFloor = floorId || "";
+        if (!menteeId) return;
+        if (menteeId === workerId) {
+          toast("自分自身を教育者に設定できません", "error");
+          return;
+        }
+        if (fromArea !== targetArea || fromFloor !== targetFloor) {
+          toast("同一エリア内のみ紐づけできます", "error");
+          return;
+        }
+        if (wouldCreateCycle(menteeId, workerId)) {
+          toast("循環する教育関係は設定できません", "error");
+          return;
+        }
+        const groupOrder = getNextGroupOrder(workerId, targetArea, targetFloor);
+        requestMentorshipChange({
+          workerId: menteeId,
+          mentorId: workerId,
+          areaId: targetArea,
+          floorId: targetFloor,
+          groupOrder
+        });
+        e.stopPropagation();
+        e.preventDefault();
+      });
+    }
 
     return card;
   }
@@ -295,11 +436,54 @@ export function makeFloor(
     toast(kind, "error");
   }
 
-  function addSlot(dropEl, workerId, areaId, assignmentId, floorId, order = 0) {
+  async function requestMentorshipChange({
+    workerId,
+    mentorId = "",
+    areaId = "",
+    floorId = "",
+    groupOrder = 0
+  }) {
+    if (_readOnly) {
+      toast("過去日は編集できません", "error");
+      return;
+    }
+    if (typeof onMentorshipChange !== "function") return;
+    const previous = getMentorship(workerId);
+    mentorshipMap.set(workerId, {
+      mentorId: mentorId || "",
+      groupOrder: typeof groupOrder === "number" ? groupOrder : 0,
+      areaId: areaId || previous.areaId || "",
+      floorId: floorId || previous.floorId || ""
+    });
+    renderAssignments();
+    try {
+      await onMentorshipChange({
+        workerId,
+        mentorId,
+        areaId,
+        floorId,
+        groupOrder
+      });
+    } catch (err) {
+      mentorshipMap.set(workerId, previous);
+      renderAssignments();
+      handleActionError("教育関係の更新に失敗しました", err);
+    }
+  }
+
+  function addSlot(
+    dropEl,
+    workerId,
+    areaId,
+    assignmentId,
+    floorId,
+    order = 0,
+    meta = {}
+  ) {
     const slot = document.createElement("div");
     slot.className = "slot";
     const info = getWorkerInfo(workerId);
-    const card = createPlacedCard(info, workerId, areaId, assignmentId, floorId);
+    const card = createPlacedCard(info, workerId, areaId, assignmentId, floorId, meta);
     if (!card) return;
     card.dataset.order = String(order);
     const settingsBtn = card.querySelector('[data-action="edit-worker"]');
@@ -513,6 +697,32 @@ export function makeFloor(
           updates
         });
         await persistOrders(updates, "配置エリアの更新に失敗しました");
+        const mentorship = getMentorship(workerId);
+        const normalizedFrom = normalizeAreaId(from);
+        const normalizedTarget = normalizeAreaId(targetAreaId);
+        const isAreaDrop =
+          e.target === drop || e.target?.classList?.contains("droparea");
+        const isSameSpot =
+          normalizedFrom === normalizedTarget && (fromFloor || "") === (dropFloorId || "");
+        if (mentorship.mentorId) {
+          if (!isSameSpot) {
+            await requestMentorshipChange({
+              workerId,
+              mentorId: "",
+              areaId: targetAreaId,
+              floorId: dropFloorId,
+              groupOrder: 0
+            });
+          } else if (isAreaDrop) {
+            await requestMentorshipChange({
+              workerId,
+              mentorId: "",
+              areaId: targetAreaId,
+              floorId: dropFloorId,
+              groupOrder: 0
+            });
+          }
+        }
       }
     });
   }
@@ -527,6 +737,57 @@ export function makeFloor(
   function updateFromAssignments(rows) {
     currentAssignments = Array.isArray(rows) ? rows.slice() : [];
     renderAssignments();
+  }
+
+  function buildDisplayOrder(list = [], areaId, floorId) {
+    const decorated = (list || []).map((row, idx) => ({
+      ...row,
+      mentorship: getMentorship(row.workerId),
+      baseOrder: typeof row.order === "number" ? row.order : idx
+    }));
+    const idSet = new Set(decorated.map((r) => r.workerId));
+    const menteesByMentor = new Map();
+    decorated.forEach((row) => {
+      const mentorId = row.mentorship.mentorId;
+      if (!mentorId || mentorId === row.workerId || !idSet.has(mentorId)) return;
+      if (!menteesByMentor.has(mentorId)) {
+        menteesByMentor.set(mentorId, []);
+      }
+      menteesByMentor.get(mentorId).push(row);
+    });
+    const mentors = decorated
+      .filter((row) => !row.mentorship.mentorId)
+      .sort((a, b) => a.baseOrder - b.baseOrder);
+    const rendered = new Set();
+    const result = [];
+    const sortMentees = (list = []) => {
+      return list.slice().sort((a, b) => {
+        const diff = (a.mentorship.groupOrder || 0) - (b.mentorship.groupOrder || 0);
+        if (diff !== 0) return diff;
+        return a.baseOrder - b.baseOrder;
+      });
+    };
+    mentors.forEach((mentor) => {
+      result.push({ ...mentor, _role: "mentor" });
+      rendered.add(mentor.workerId);
+      const mentees = sortMentees(menteesByMentor.get(mentor.workerId) || []);
+      mentees.forEach((row) => {
+        if (rendered.has(row.workerId)) return;
+        rendered.add(row.workerId);
+        result.push({
+          ...row,
+          _role: "mentee",
+          _mentorId: mentor.workerId,
+          _mentorName: getWorkerInfo(mentor.workerId).name
+        });
+      });
+    });
+    decorated.forEach((row) => {
+      if (rendered.has(row.workerId)) return;
+      rendered.add(row.workerId);
+      result.push({ ...row, _role: "solo" });
+    });
+    return result;
   }
 
   function renderAssignments() {
@@ -566,9 +827,26 @@ export function makeFloor(
       );
       applyDropLayout(drop, areaMeta || { floorId });
       if (!drop) return;
-      sorted.forEach((r, idx) => {
+      const displayList = buildDisplayOrder(sorted, targetAreaId, floorId);
+      displayList.forEach((r, idx) => {
         const order = typeof r.order === "number" ? r.order : idx;
-        addSlot(drop, r.workerId, targetAreaId, r.id, floorId, order);
+        const role = r._role || (r.mentorship?.mentorId ? "mentee" : "solo");
+        const meta = {
+          role,
+          mentorName: r._mentorName || "",
+          onDetach:
+            role === "mentee"
+              ? () =>
+                  requestMentorshipChange({
+                    workerId: r.workerId,
+                    mentorId: "",
+                    areaId: targetAreaId,
+                    floorId,
+                    groupOrder: 0
+                  })
+              : null
+        };
+        addSlot(drop, r.workerId, targetAreaId, r.id, floorId, order, meta);
       });
     });
     if (_showFallback) {
@@ -581,6 +859,11 @@ export function makeFloor(
   // 外部（Dashboard）から呼ばれる：workerMapを差し替え→色・時間・表示を更新
   function setWorkerMap(map) {
     _workerMap = new Map(map || []);
+    renderAssignments();
+  }
+
+  function setMentorshipMap(map) {
+    mentorshipMap = new Map(map || []);
     renderAssignments();
   }
 
@@ -808,6 +1091,7 @@ export function makeFloor(
   const api = {
     updateFromAssignments,
     setWorkerMap,
+    setMentorshipMap,
     setAreas,
     setReadOnly,
     setSite,

@@ -717,7 +717,9 @@ export async function saveDailyRoster({ userId, siteId, floorId, date, workers }
     workerId: w.workerId,
     name: w.name || "",
     areaId: w.areaId || "",
-    isLeader: Boolean(w.isLeader)
+    isLeader: Boolean(w.isLeader),
+    mentorId: w.mentorId || "",
+    groupOrder: typeof w.groupOrder === "number" ? w.groupOrder : 0
   }));
   await ensureSiteMetadata(userId, siteId);
   const ref = siteDocument(userId, siteId, "dailyRosters", rosterDocId(siteId, floorId || "", date));
@@ -749,7 +751,9 @@ export async function getDailyRoster({ userId, siteId, floorId, date }) {
         workerId: w.workerId,
         name: w.name || w.workerId,
         areaId: w.areaId || "",
-        isLeader: Boolean(w.isLeader)
+        isLeader: Boolean(w.isLeader),
+        mentorId: w.mentorId || "",
+        groupOrder: typeof w.groupOrder === "number" ? w.groupOrder : 0
       }))
     : [];
   return { workers };

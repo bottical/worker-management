@@ -62,6 +62,7 @@ export function renderDashboard(mount) {
     </button>
     <label>文字サイズ
       <select id="fontScale">
+        <option value="0.8">極小</option>
         <option value="0.9">小</option>
         <option value="1">標準</option>
         <option value="1.1">大</option>

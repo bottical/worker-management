@@ -307,11 +307,17 @@ export function makeFloor(
     floorId,
     meta = {}
   ) {
-    const { role = "solo", mentorName = "", onDetach = null } = meta;
+    const { role = "solo", mentorId = "", groupOrder = 0, onDetach = null } = meta;
     const card = document.createElement("div");
     card.className = "card";
     if (role === "mentee") card.classList.add("mentee-card");
     if (role === "mentor") card.classList.add("mentor-card");
+    if (mentorId) {
+      card.dataset.mentorId = mentorId;
+    }
+    if (typeof groupOrder === "number") {
+      card.dataset.groupOrder = String(groupOrder);
+    }
     card.dataset.type = "placed";
     card.dataset.assignmentId = assignmentId;
     card.dataset.workerId = workerId;
@@ -341,16 +347,6 @@ export function makeFloor(
       badgeRow.appendChild(mentorBadge);
     }
     if (role === "mentee") {
-      const menteeBadge = document.createElement("span");
-      menteeBadge.className = "badge badge-mentee";
-      menteeBadge.textContent = "被教育者";
-      badgeRow.appendChild(menteeBadge);
-      if (mentorName) {
-        const label = document.createElement("span");
-        label.className = "mentee-mentor-label";
-        label.textContent = mentorName;
-        badgeRow.appendChild(label);
-      }
       if (typeof onDetach === "function") {
         const detach = document.createElement("button");
         detach.type = "button";
@@ -867,7 +863,8 @@ export function makeFloor(
         const role = r._role || (r.mentorship?.mentorId ? "mentee" : "solo");
         const meta = {
           role,
-          mentorName: r._mentorName || "",
+          mentorId: r._mentorId || r.mentorship?.mentorId || "",
+          groupOrder: r.mentorship?.groupOrder || 0,
           onDetach:
             role === "mentee"
               ? () =>
@@ -888,6 +885,78 @@ export function makeFloor(
     } else {
       cleanupFallbackZones(new Set());
     }
+    renderMentorshipLines();
+  }
+
+  function clearMentorshipLines() {
+    zonesEl.querySelectorAll(".mentor-thread").forEach((line) => line.remove());
+    zonesEl.querySelectorAll(".card.is-mentee").forEach((card) => {
+      card.classList.remove("is-mentee");
+      card.removeAttribute("data-mentor-id");
+    });
+  }
+
+  function renderMentorshipLines() {
+    clearMentorshipLines();
+    if (!mentorshipMap || mentorshipMap.size === 0) return;
+
+    const cards = Array.from(zonesEl.querySelectorAll(".card[data-worker-id]"));
+    if (!cards.length) return;
+    const cardByWorkerId = new Map(cards.map((card) => [card.dataset.workerId, card]));
+
+    const groups = new Map();
+
+    mentorshipMap.forEach((meta, menteeId) => {
+      const mentorId = meta?.mentorId;
+      if (!mentorId) return;
+      const menteeCard = cardByWorkerId.get(menteeId);
+      const mentorCard = cardByWorkerId.get(mentorId);
+      if (!menteeCard || !mentorCard) return;
+      const menteeDrop = menteeCard.closest(".droparea");
+      const mentorDrop = mentorCard.closest(".droparea");
+      if (!menteeDrop || !mentorDrop || menteeDrop !== mentorDrop) return;
+
+      const key = `${mentorId}__${menteeDrop.dataset.areaId || ""}__${
+        menteeDrop.dataset.floorId || ""
+      }`;
+      if (!groups.has(key)) {
+        groups.set(key, { mentorId, drop: menteeDrop, mentees: [] });
+      }
+      const group = groups.get(key);
+      group.mentees.push({
+        card: menteeCard,
+        groupOrder: typeof meta?.groupOrder === "number" ? meta.groupOrder : 0
+      });
+
+      menteeCard.classList.add("is-mentee");
+      menteeCard.dataset.mentorId = mentorId;
+    });
+
+    groups.forEach(({ drop, mentees, mentorId }) => {
+      if (!drop || !mentees.length) return;
+      const sorted = mentees.slice().sort((a, b) => {
+        const orderDiff = a.groupOrder - b.groupOrder;
+        if (orderDiff !== 0) return orderDiff;
+        const rectA = a.card.getBoundingClientRect();
+        const rectB = b.card.getBoundingClientRect();
+        return rectA.top - rectB.top;
+      });
+      const rects = sorted.map((item) => item.card.getBoundingClientRect());
+      const top = Math.min(...rects.map((r) => r.top));
+      const bottom = Math.max(...rects.map((r) => r.bottom));
+      const parentRect = drop.getBoundingClientRect();
+      const offsetTop = top - parentRect.top + (drop.scrollTop || 0);
+      const height = bottom - top;
+      if (height <= 0) return;
+
+      const thread = document.createElement("div");
+      thread.className = "mentor-thread";
+      thread.dataset.mentorId = mentorId;
+      thread.style.top = `${offsetTop}px`;
+      thread.style.height = `${height}px`;
+
+      drop.appendChild(thread);
+    });
   }
 
   // 外部（Dashboard）から呼ばれる：workerMapを差し替え→色・時間・表示を更新

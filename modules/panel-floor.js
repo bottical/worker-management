@@ -235,6 +235,39 @@ export function makeFloor(
     return maxOrder + 1;
   }
 
+  function buildGroupOrderUpdates(assignments = [], areaId = "", floorId = "") {
+    const normalizedArea = normalizeAreaId(areaId);
+    const normalizedFloor = floorId || "";
+    const counters = new Map();
+    const updates = [];
+    assignments.forEach((row) => {
+      const meta = getMentorship(row.workerId);
+      const metaArea = normalizeAreaId(meta.areaId || row.areaId);
+      const metaFloor = meta.floorId || row.floorId || "";
+      if (!meta.mentorId) return;
+      if (metaArea !== normalizedArea || metaFloor !== normalizedFloor) return;
+      const key = `${meta.mentorId}__${metaArea}__${metaFloor}`;
+      const nextOrder = counters.get(key) || 0;
+      counters.set(key, nextOrder + 1);
+      if (meta.groupOrder !== nextOrder) {
+        updates.push({
+          workerId: row.workerId,
+          mentorId: meta.mentorId,
+          areaId: metaArea,
+          floorId: metaFloor,
+          groupOrder: nextOrder
+        });
+      }
+    });
+    return updates;
+  }
+
+  async function applyMentorshipUpdates(updates = []) {
+    for (const payload of updates) {
+      await requestMentorshipChange(payload);
+    }
+  }
+
   function applyAccent(cardEl, color) {
     if (!cardEl) return;
     if (color) {
@@ -722,28 +755,35 @@ export function makeFloor(
         const mentorship = getMentorship(workerId);
         const normalizedFrom = normalizeAreaId(from);
         const normalizedTarget = normalizeAreaId(targetAreaId);
-        const isAreaDrop =
-          e.target === drop || e.target?.classList?.contains("droparea");
         const isSameSpot =
           normalizedFrom === normalizedTarget && (fromFloor || "") === (dropFloorId || "");
-        if (mentorship.mentorId) {
-          if (!isSameSpot) {
-            await requestMentorshipChange({
-              workerId,
-              mentorId: "",
-              areaId: targetAreaId,
-              floorId: dropFloorId,
-              groupOrder: 0
-            });
-          } else if (isAreaDrop) {
-            await requestMentorshipChange({
-              workerId,
-              mentorId: "",
-              areaId: targetAreaId,
-              floorId: dropFloorId,
-              groupOrder: 0
-            });
-          }
+        const shouldDetachMentorship = mentorship.mentorId && !isSameSpot;
+        if (shouldDetachMentorship) {
+          await requestMentorshipChange({
+            workerId,
+            mentorId: "",
+            areaId: targetAreaId,
+            floorId: dropFloorId,
+            groupOrder: 0
+          });
+        }
+        let groupOrderUpdates = buildGroupOrderUpdates(
+          targetList,
+          targetAreaId,
+          dropFloorId
+        );
+        if (targetKey !== sourceKey) {
+          groupOrderUpdates.push(
+            ...buildGroupOrderUpdates(sourceList, from, fromFloor)
+          );
+        }
+        if (shouldDetachMentorship) {
+          groupOrderUpdates = groupOrderUpdates.filter(
+            (update) => update.workerId !== workerId
+          );
+        }
+        if (groupOrderUpdates.length) {
+          await applyMentorshipUpdates(groupOrderUpdates);
         }
       }
     });

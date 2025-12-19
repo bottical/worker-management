@@ -340,6 +340,7 @@ export function makeFloor(
 
     const badgeRow = document.createElement("div");
     badgeRow.className = "card-badges";
+    let detachBtn = null;
     if (role === "mentor") {
       const mentorBadge = document.createElement("span");
       mentorBadge.className = "badge badge-mentor";
@@ -348,17 +349,16 @@ export function makeFloor(
     }
     if (role === "mentee") {
       if (typeof onDetach === "function") {
-        const detach = document.createElement("button");
-        detach.type = "button";
-        detach.className = "mentee-detach";
-        detach.title = "教育関係を解除";
-        detach.textContent = "×";
-        detach.addEventListener("click", (e) => {
+        detachBtn = document.createElement("button");
+        detachBtn.type = "button";
+        detachBtn.className = "mentee-detach";
+        detachBtn.title = "教育関係を解除";
+        detachBtn.textContent = "×";
+        detachBtn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
           onDetach();
         });
-        badgeRow.appendChild(detach);
       }
     }
     if (badgeRow.children.length) {
@@ -375,6 +375,9 @@ export function makeFloor(
     card.appendChild(left);
     card.appendChild(body);
     card.appendChild(right);
+    if (detachBtn) {
+      card.appendChild(detachBtn);
+    }
     card.appendChild(settingsBtn);
 
     if (role !== "mentee") {
@@ -920,7 +923,12 @@ export function makeFloor(
         menteeDrop.dataset.floorId || ""
       }`;
       if (!groups.has(key)) {
-        groups.set(key, { mentorId, drop: menteeDrop, mentees: [] });
+        groups.set(key, { mentorId, drop: menteeDrop, mentees: [], mentorCard });
+      } else {
+        const group = groups.get(key);
+        if (!group.mentorCard) {
+          group.mentorCard = mentorCard;
+        }
       }
       const group = groups.get(key);
       group.mentees.push({
@@ -932,7 +940,7 @@ export function makeFloor(
       menteeCard.dataset.mentorId = mentorId;
     });
 
-    groups.forEach(({ drop, mentees, mentorId }) => {
+    groups.forEach(({ drop, mentees, mentorId, mentorCard }) => {
       if (!drop || !mentees.length) return;
       const sorted = mentees.slice().sort((a, b) => {
         const orderDiff = a.groupOrder - b.groupOrder;
@@ -941,7 +949,13 @@ export function makeFloor(
         const rectB = b.card.getBoundingClientRect();
         return rectA.top - rectB.top;
       });
-      const rects = sorted.map((item) => item.card.getBoundingClientRect());
+      const cardsForBounds = [];
+      if (mentorCard) {
+        cardsForBounds.push(mentorCard);
+      }
+      sorted.forEach((item) => cardsForBounds.push(item.card));
+      if (!cardsForBounds.length) return;
+      const rects = cardsForBounds.map((card) => card.getBoundingClientRect());
       const top = Math.min(...rects.map((r) => r.top));
       const bottom = Math.max(...rects.map((r) => r.bottom));
       const parentRect = drop.getBoundingClientRect();

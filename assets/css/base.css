@@ -15,7 +15,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .grid{display:grid;gap:12px}
 .twocol{grid-template-columns:320px 1fr;align-items:start}
 .dashboard-grid{grid-template-columns:280px 1fr;width:100%;--dashboard-font-scale:1}
-.dashboard-grid .card{font-size:calc(14px * var(--dashboard-font-scale,1))}
+.dashboard-grid .card{font-size:calc(20px * var(--dashboard-font-scale,1))}
 .left{border:1px solid var(--border)}
 .right{border:1px solid var(--border)}
 .hint{font-size:12px;color:var(--muted)}

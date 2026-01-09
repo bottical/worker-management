@@ -28,9 +28,8 @@ export function toast(msg, type = "info") {
  * @returns {string} - フォーマット済み文字列
  */
 export function fmtRange(start, end) {
-  if (!start && !end) return "";
-  if (start && end) return `${start}〜${end}`;
-  if (start) return `${start}〜`;
-  if (end) return `〜${end}`;
-  return "";
+  if (!start || !end) return "";
+  const [startHour] = start.split(":");
+  const [endHour] = end.split(":");
+  return `${startHour}-${endHour}`;
 }

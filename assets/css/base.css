@@ -24,7 +24,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card.pool-card{grid-template-columns:minmax(16px,48px) 1fr minmax(16px,48px);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.03);font-size:calc(12px * var(--dashboard-font-scale,1))}
 .card.pool-card .card-body{padding:8px;gap:4px}
 .card.pool-card .card-name{font-size:1.1em}
-.card.pool-card .card-time{padding:3px 8px;font-size:calc(20px * var(--dashboard-font-scale,1))}
+.card.pool-card .card-time{padding:3px 8px;font-size:calc(14px * var(--dashboard-font-scale,1))}
 .card.pool-card .employment-count{font-size:calc(10px * var(--dashboard-font-scale,1))}
 .card.pool-card .employment-count .count{font-size:calc(14px * var(--dashboard-font-scale,1))}
 .card.pool-card .card-action{top:4px;right:4px}

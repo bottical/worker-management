@@ -38,7 +38,7 @@ export function makeFloor(
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
   let mentorshipMap = new Map();
-  const { onEditWorker, getLeaderFlag, onMentorshipChange } = options;
+  const { onEditWorker, onMentorshipChange } = options;
 
   function toPositiveInt(value) {
     const num = Number(value);
@@ -184,7 +184,6 @@ export function makeFloor(
         ? w.employmentCount
         : Number(w.employmentCount || 0),
       memo: w.memo || "",
-      isLeader: Boolean(w.isLeader),
       skillLevels: normalizeSkillLevels(w.skillLevels)
     };
   }
@@ -316,25 +315,25 @@ export function makeFloor(
     return null;
   }
 
-  function buildCardBody(info, areaId, floorId) {
+  function buildCardBody(info, areaId, floorId, timeNotes = {}) {
     const body = document.createElement("div");
     body.className = "card-body";
 
     const header = document.createElement("div");
     header.className = "card-header";
 
-    if (info.isLeader) {
-      const leader = document.createElement("span");
-      leader.className = "leader-mark";
-      leader.title = "リーダー";
-      leader.textContent = "★";
-      header.appendChild(leader);
-    }
-
     const name = document.createElement("div");
     name.className = "card-name";
     name.textContent = info.name;
     header.appendChild(name);
+
+    const timeRow = document.createElement("div");
+    timeRow.className = "card-time-row";
+
+    const leftNote = document.createElement("span");
+    leftNote.className = "card-time-note left";
+    const rightNote = document.createElement("span");
+    rightNote.className = "card-time-note right";
 
     const time = document.createElement("div");
     time.className = "card-time";
@@ -352,6 +351,25 @@ export function makeFloor(
       time.style.background = endColor;
     }
 
+    const normalizedLeft =
+      typeof timeNotes.timeNoteLeft === "string" ? timeNotes.timeNoteLeft.trim() : "";
+    const normalizedRight =
+      typeof timeNotes.timeNoteRight === "string" ? timeNotes.timeNoteRight.trim() : "";
+    if (normalizedLeft) {
+      leftNote.textContent = normalizedLeft;
+    } else {
+      leftNote.style.display = "none";
+    }
+    if (normalizedRight) {
+      rightNote.textContent = normalizedRight;
+    } else {
+      rightNote.style.display = "none";
+    }
+
+    timeRow.appendChild(leftNote);
+    timeRow.appendChild(time);
+    timeRow.appendChild(rightNote);
+
     const memo = document.createElement("div");
     memo.className = "card-memo hint";
     memo.textContent = info.memo ? `備考: ${info.memo}` : "備考: -";
@@ -368,7 +386,7 @@ export function makeFloor(
     metaRow.appendChild(employment);
 
     body.appendChild(header);
-    body.appendChild(time);
+    body.appendChild(timeRow);
     body.appendChild(metaRow);
 
     return body;
@@ -380,7 +398,8 @@ export function makeFloor(
     areaId,
     assignmentId,
     floorId,
-    meta = {}
+    meta = {},
+    timeNotes = {}
   ) {
     const { role = "solo", mentorId = "", groupOrder = 0, onDetach = null } = meta;
     const card = document.createElement("div");
@@ -411,7 +430,7 @@ export function makeFloor(
       _skillSettings,
       normalizeSkillLevels(info.skillLevels)
     );
-    const body = buildCardBody(info, areaId, floorId);
+    const body = buildCardBody(info, areaId, floorId, timeNotes);
 
     const badgeRow = document.createElement("div");
     badgeRow.className = "card-badges";
@@ -571,12 +590,21 @@ export function makeFloor(
     assignmentId,
     floorId,
     order = 0,
-    meta = {}
+    meta = {},
+    timeNotes = {}
   ) {
     const slot = document.createElement("div");
     slot.className = "slot";
     const info = getWorkerInfo(workerId);
-    const card = createPlacedCard(info, workerId, areaId, assignmentId, floorId, meta);
+    const card = createPlacedCard(
+      info,
+      workerId,
+      areaId,
+      assignmentId,
+      floorId,
+      meta,
+      timeNotes
+    );
     if (!card) return;
     card.dataset.order = String(order);
     const settingsBtn = card.querySelector('[data-action="edit-worker"]');
@@ -682,8 +710,6 @@ export function makeFloor(
         }
         // 未配置 → IN
         const workerId = e.dataTransfer.getData("workerId");
-        const isLeader =
-          typeof getLeaderFlag === "function" ? Boolean(getLeaderFlag(workerId)) : false;
         const existing = getAreaAssignments(targetAreaId, dropFloorId);
         const boundedIndex = Math.max(0, Math.min(insertIndex, existing.length));
         const updates = existing.map((row, idx) => ({
@@ -703,7 +729,8 @@ export function makeFloor(
           workerId,
           areaId,
           floorId: dropFloorId,
-          isLeader
+          timeNoteLeft: "",
+          timeNoteRight: ""
         });
         try {
           await persistOrders(updates);
@@ -713,7 +740,6 @@ export function makeFloor(
             floorId: dropFloorId,
             areaId: targetAreaId,
             workerId,
-            isLeader,
             order: boundedIndex
           });
         } catch (err) {
@@ -962,7 +988,10 @@ export function makeFloor(
                   })
               : null
         };
-        addSlot(drop, r.workerId, targetAreaId, r.id, floorId, order, meta);
+        addSlot(drop, r.workerId, targetAreaId, r.id, floorId, order, meta, {
+          timeNoteLeft: r.timeNoteLeft,
+          timeNoteRight: r.timeNoteRight
+        });
       });
     });
     if (_showFallback) {

@@ -182,8 +182,6 @@ function normalizeSkillSettings(settings = {}) {
     return { id: def.id, name: name || def.name };
   });
 
-  const hasTimeRules = Object.prototype.hasOwnProperty.call(settings, "timeRules");
-  const timeRulesSource = settings.timeRules || {};
   const normalizeTimeRule = (rule = {}) => {
     if (!rule) return null;
     const hour = Number(rule.hour);
@@ -192,19 +190,38 @@ function normalizeSkillSettings(settings = {}) {
     if (!color) return null;
     return { hour, color };
   };
-  const timeRules = {};
-  const startHour = normalizeTimeRule(timeRulesSource.startHour);
-  const endHour = normalizeTimeRule(timeRulesSource.endHour);
-  if (startHour) timeRules.startHour = startHour;
-  if (endHour) timeRules.endHour = endHour;
+  const normalizeTimeRuleList = (list = []) => {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    const normalized = [];
+    for (const entry of list) {
+      const rule = normalizeTimeRule(entry);
+      if (!rule) continue;
+      if (seen.has(rule.hour)) continue;
+      seen.add(rule.hour);
+      normalized.push(rule);
+    }
+    return normalized;
+  };
 
-  if (hasTimeRules) {
-    return { skills, levels, timeRules };
-  }
-  if (Object.keys(timeRules).length) {
-    return { skills, levels, timeRules };
-  }
-  return { skills, levels };
+  const timeRulesSource = settings.timeRules || {};
+  const startCandidates = Array.isArray(timeRulesSource.startRules)
+    ? [...timeRulesSource.startRules]
+    : [];
+  const endCandidates = Array.isArray(timeRulesSource.endRules)
+    ? [...timeRulesSource.endRules]
+    : [];
+  const fallbackStart = normalizeTimeRule(timeRulesSource.startHour);
+  const fallbackEnd = normalizeTimeRule(timeRulesSource.endHour);
+  if (fallbackStart) startCandidates.push(fallbackStart);
+  if (fallbackEnd) endCandidates.push(fallbackEnd);
+
+  const timeRules = {
+    startRules: normalizeTimeRuleList(startCandidates),
+    endRules: normalizeTimeRuleList(endCandidates)
+  };
+
+  return { skills, levels, timeRules };
 }
 
 function normalizeSkillLevels(levels = {}) {

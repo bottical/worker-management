@@ -8,6 +8,7 @@ import {
   removeWorker
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
+import { normalizeHex } from "../core/colors.js";
 
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "18:00";
@@ -23,6 +24,20 @@ function normalizeSkillLevels(levels = {}) {
     }
   });
   return result;
+}
+
+function normalizeTimeRules(timeRules = {}) {
+  if (!timeRules || typeof timeRules !== "object") {
+    return { startRules: [], endRules: [] };
+  }
+  const startRules = Array.isArray(timeRules.startRules) ? timeRules.startRules : [];
+  const endRules = Array.isArray(timeRules.endRules) ? timeRules.endRules : [];
+  const fallbackStart = timeRules.startHour ? [timeRules.startHour] : [];
+  const fallbackEnd = timeRules.endHour ? [timeRules.endHour] : [];
+  return {
+    startRules: startRules.length ? startRules : fallbackStart,
+    endRules: endRules.length ? endRules : fallbackEnd
+  };
 }
 
 export function renderUsers(mount){
@@ -44,20 +59,18 @@ export function renderUsers(mount){
         <form id="skillConfigForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px">
           <div id="skillNameFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
           <div id="skillLevelFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
-          <div id="timeRuleFields" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">
-            <div style="grid-column:1/-1;font-weight:700">勤務時間ハイライト設定</div>
-            <label>開始時間（hour）
-              <input name="timeRuleStartHour" type="number" min="0" max="23" step="1" placeholder="9">
-            </label>
-            <label>開始時間 色
-              <input name="timeRuleStartColor" placeholder="#dbeafe">
-            </label>
-            <label>終了時間（hour）
-              <input name="timeRuleEndHour" type="number" min="0" max="23" step="1" placeholder="18">
-            </label>
-            <label>終了時間 色
-              <input name="timeRuleEndColor" placeholder="#fee2e2">
-            </label>
+          <div id="timeRuleFields" style="grid-column:1/-1;display:grid;gap:12px">
+            <div style="font-weight:700">勤務時間ハイライト設定</div>
+            <div style="display:grid;gap:8px">
+              <div style="font-weight:600">開始時間ルール</div>
+              <div id="timeRuleStartList" style="display:grid;gap:6px"></div>
+              <button class="button ghost" type="button" id="addStartRule">開始ルールを追加</button>
+            </div>
+            <div style="display:grid;gap:8px">
+              <div style="font-weight:600">終了時間ルール</div>
+              <div id="timeRuleEndList" style="display:grid;gap:6px"></div>
+              <button class="button ghost" type="button" id="addEndRule">終了ルールを追加</button>
+            </div>
           </div>
           <div class="form-actions" style="grid-column:1/-1">
             <button class="button" type="submit">スキル設定を保存</button>
@@ -137,10 +150,10 @@ export function renderUsers(mount){
   const skillConfigForm = wrap.querySelector("#skillConfigForm");
   const skillNameFields = wrap.querySelector("#skillNameFields");
   const skillLevelFields = wrap.querySelector("#skillLevelFields");
-  const timeRuleStartHourInput = wrap.querySelector('input[name="timeRuleStartHour"]');
-  const timeRuleStartColorInput = wrap.querySelector('input[name="timeRuleStartColor"]');
-  const timeRuleEndHourInput = wrap.querySelector('input[name="timeRuleEndHour"]');
-  const timeRuleEndColorInput = wrap.querySelector('input[name="timeRuleEndColor"]');
+  const timeRuleStartList = wrap.querySelector("#timeRuleStartList");
+  const timeRuleEndList = wrap.querySelector("#timeRuleEndList");
+  const addStartRuleBtn = wrap.querySelector("#addStartRule");
+  const addEndRuleBtn = wrap.querySelector("#addEndRule");
   const skillConfigContent = wrap.querySelector("#skillConfigContent");
   const skillConfigToggle = wrap.querySelector("#toggleSkillConfig");
   const workerFormContent = wrap.querySelector("#workerFormContent");
@@ -224,21 +237,51 @@ export function renderUsers(mount){
       .join("");
   };
 
+  const buildTimeRuleRow = (rule = {}, type = "start")=>{
+    const row = document.createElement("div");
+    row.className = "time-rule-row";
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "120px 1fr auto";
+    row.style.gap = "6px";
+    row.style.alignItems = "center";
+    const hourPlaceholder = type === "start" ? "9" : "18";
+    const colorPlaceholder = type === "start" ? "#dbeafe" : "#fee2e2";
+    row.innerHTML = `
+      <input class="time-rule-hour" type="number" min="0" max="23" step="1" placeholder="${hourPlaceholder}">
+      <input class="time-rule-color" placeholder="${colorPlaceholder}">
+      <button class="button ghost time-rule-remove" type="button">削除</button>
+    `;
+    const hourInput = row.querySelector(".time-rule-hour");
+    const colorInput = row.querySelector(".time-rule-color");
+    const removeBtn = row.querySelector(".time-rule-remove");
+    if(hourInput && typeof rule.hour === "number"){
+      hourInput.value = String(rule.hour);
+    }
+    if(colorInput && rule.color){
+      colorInput.value = rule.color;
+    }
+    if(removeBtn){
+      removeBtn.addEventListener("click", ()=>{
+        row.remove();
+      });
+    }
+    return row;
+  };
+
+  const appendTimeRuleRow = (list, rule = {}, type = "start")=>{
+    if(!list) return;
+    list.appendChild(buildTimeRuleRow(rule, type));
+  };
+
   const setTimeRuleInputs = ()=>{
-    const timeRules = skillSettings.timeRules || {};
-    if(timeRuleStartHourInput){
-      const val = timeRules.startHour?.hour;
-      timeRuleStartHourInput.value = typeof val === "number" ? String(val) : "";
+    const { startRules, endRules } = normalizeTimeRules(skillSettings.timeRules);
+    if(timeRuleStartList){
+      timeRuleStartList.innerHTML = "";
+      startRules.forEach((rule)=>appendTimeRuleRow(timeRuleStartList, rule, "start"));
     }
-    if(timeRuleStartColorInput){
-      timeRuleStartColorInput.value = timeRules.startHour?.color || "";
-    }
-    if(timeRuleEndHourInput){
-      const val = timeRules.endHour?.hour;
-      timeRuleEndHourInput.value = typeof val === "number" ? String(val) : "";
-    }
-    if(timeRuleEndColorInput){
-      timeRuleEndColorInput.value = timeRules.endHour?.color || "";
+    if(timeRuleEndList){
+      timeRuleEndList.innerHTML = "";
+      endRules.forEach((rule)=>appendTimeRuleRow(timeRuleEndList, rule, "end"));
     }
   };
 
@@ -360,7 +403,7 @@ export function renderUsers(mount){
       e.preventDefault();
       const fd = new FormData(skillConfigForm);
       const parseHourInput = (raw, label)=>{
-        if(!raw) return null;
+        if(raw === "") return null;
         const num = Number(raw);
         if(!Number.isInteger(num) || num < 0 || num > 23){
           toast(`${label}は0〜23の整数で入力してください`,"error");
@@ -368,29 +411,42 @@ export function renderUsers(mount){
         }
         return num;
       };
-      const startHourRaw = (fd.get("timeRuleStartHour") || "").toString().trim();
-      const startColorRaw = (fd.get("timeRuleStartColor") || "").toString().trim();
-      const endHourRaw = (fd.get("timeRuleEndHour") || "").toString().trim();
-      const endColorRaw = (fd.get("timeRuleEndColor") || "").toString().trim();
-      const startHour = parseHourInput(startHourRaw, "開始時間");
-      if(startHourRaw && startHour === null) return;
-      const endHour = parseHourInput(endHourRaw, "終了時間");
-      if(endHourRaw && endHour === null) return;
-      const timeRules = {};
-      if(startHour !== null){
-        if(!startColorRaw){
-          toast("開始時間の色を入力してください","error");
-          return;
+      const parseRuleRows = (list, label)=>{
+        const rows = Array.from(list?.querySelectorAll(".time-rule-row") || []);
+        const rules = [];
+        const seen = new Set();
+        for(const row of rows){
+          const hourRaw = row.querySelector(".time-rule-hour")?.value?.toString().trim() ?? "";
+          const colorRaw = row.querySelector(".time-rule-color")?.value?.toString().trim() ?? "";
+          if(!hourRaw && !colorRaw) continue;
+          if(!hourRaw || !colorRaw){
+            toast(`${label}ルールは時間と色を入力してください`,"error");
+            return null;
+          }
+          const hour = parseHourInput(hourRaw, `${label}の時間`);
+          if(hour === null) return null;
+          if(seen.has(hour)){
+            toast(`${label}ルールに同じ時間が複数登録されています`,"error");
+            return null;
+          }
+          const normalizedColor = normalizeHex(colorRaw);
+          if(!normalizedColor){
+            toast(`${label}の色は#RGBまたは#RRGGBB形式で入力してください`,"error");
+            return null;
+          }
+          rules.push({ hour, color: `#${normalizedColor}` });
+          seen.add(hour);
         }
-        timeRules.startHour = { hour: startHour, color: startColorRaw };
-      }
-      if(endHour !== null){
-        if(!endColorRaw){
-          toast("終了時間の色を入力してください","error");
-          return;
-        }
-        timeRules.endHour = { hour: endHour, color: endColorRaw };
-      }
+        return rules;
+      };
+      const startRules = parseRuleRows(timeRuleStartList, "開始時間");
+      if(startRules === null) return;
+      const endRules = parseRuleRows(timeRuleEndList, "終了時間");
+      if(endRules === null) return;
+      const timeRules = {
+        startRules,
+        endRules
+      };
       const next = {
         skills: skillSettings.skills.map((skill, idx)=>({
           id: skill.id,
@@ -420,6 +476,18 @@ export function renderUsers(mount){
         console.error(err);
         toast("スキル設定の保存に失敗しました","error");
       }
+    });
+  }
+
+  if(addStartRuleBtn){
+    addStartRuleBtn.addEventListener("click", ()=>{
+      appendTimeRuleRow(timeRuleStartList, {}, "start");
+    });
+  }
+
+  if(addEndRuleBtn){
+    addEndRuleBtn.addEventListener("click", ()=>{
+      appendTimeRuleRow(timeRuleEndList, {}, "end");
     });
   }
 

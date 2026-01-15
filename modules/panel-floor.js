@@ -292,6 +292,30 @@ export function makeFloor(
     return Number.isNaN(parsed) ? null : parsed;
   }
 
+  function normalizeTimeRules(timeRules = {}) {
+    if (!timeRules || typeof timeRules !== "object") {
+      return { startRules: [], endRules: [] };
+    }
+    const startRules = Array.isArray(timeRules.startRules) ? timeRules.startRules : [];
+    const endRules = Array.isArray(timeRules.endRules) ? timeRules.endRules : [];
+    const fallbackStart = timeRules.startHour ? [timeRules.startHour] : [];
+    const fallbackEnd = timeRules.endHour ? [timeRules.endHour] : [];
+    return {
+      startRules: startRules.length ? startRules : fallbackStart,
+      endRules: endRules.length ? endRules : fallbackEnd
+    };
+  }
+
+  function findRuleColor(rules, hour) {
+    if (hour === null) return null;
+    for (const rule of rules) {
+      if (rule && typeof rule.hour === "number" && rule.hour === hour) {
+        return rule.color;
+      }
+    }
+    return null;
+  }
+
   function buildCardBody(info, areaId, floorId) {
     const body = document.createElement("div");
     body.className = "card-body";
@@ -316,14 +340,16 @@ export function makeFloor(
     time.className = "card-time";
     const meta = fmtRange(info.start, info.end);
     time.textContent = meta || "時間未設定";
-    const timeRules = _skillSettings?.timeRules || {};
+    const timeRules = normalizeTimeRules(_skillSettings?.timeRules || {});
     const startHour = parseHour(info.start);
     const endHour = parseHour(info.end);
-    if (timeRules.startHour && startHour !== null && startHour === timeRules.startHour.hour) {
-      time.style.background = timeRules.startHour.color;
+    const startColor = findRuleColor(timeRules.startRules, startHour);
+    if (startColor) {
+      time.style.background = startColor;
     }
-    if (timeRules.endHour && endHour !== null && endHour === timeRules.endHour.hour) {
-      time.style.background = timeRules.endHour.color;
+    const endColor = findRuleColor(timeRules.endRules, endHour);
+    if (endColor) {
+      time.style.background = endColor;
     }
 
     const memo = document.createElement("div");

@@ -44,6 +44,21 @@ export function renderUsers(mount){
         <form id="skillConfigForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:12px">
           <div id="skillNameFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
           <div id="skillLevelFields" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
+          <div id="timeRuleFields" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">
+            <div style="grid-column:1/-1;font-weight:700">勤務時間ハイライト設定</div>
+            <label>開始時間（hour）
+              <input name="timeRuleStartHour" type="number" min="0" max="23" step="1" placeholder="9">
+            </label>
+            <label>開始時間 色
+              <input name="timeRuleStartColor" placeholder="#dbeafe">
+            </label>
+            <label>終了時間（hour）
+              <input name="timeRuleEndHour" type="number" min="0" max="23" step="1" placeholder="18">
+            </label>
+            <label>終了時間 色
+              <input name="timeRuleEndColor" placeholder="#fee2e2">
+            </label>
+          </div>
           <div class="form-actions" style="grid-column:1/-1">
             <button class="button" type="submit">スキル設定を保存</button>
           </div>
@@ -122,6 +137,10 @@ export function renderUsers(mount){
   const skillConfigForm = wrap.querySelector("#skillConfigForm");
   const skillNameFields = wrap.querySelector("#skillNameFields");
   const skillLevelFields = wrap.querySelector("#skillLevelFields");
+  const timeRuleStartHourInput = wrap.querySelector('input[name="timeRuleStartHour"]');
+  const timeRuleStartColorInput = wrap.querySelector('input[name="timeRuleStartColor"]');
+  const timeRuleEndHourInput = wrap.querySelector('input[name="timeRuleEndHour"]');
+  const timeRuleEndColorInput = wrap.querySelector('input[name="timeRuleEndColor"]');
   const skillConfigContent = wrap.querySelector("#skillConfigContent");
   const skillConfigToggle = wrap.querySelector("#toggleSkillConfig");
   const workerFormContent = wrap.querySelector("#workerFormContent");
@@ -203,6 +222,24 @@ export function renderUsers(mount){
     skillLevelFields.innerHTML = skillSettings.levels
       .map((level, idx)=>`<label>ステータス${idx + 1} 名称<input required name="levelName-${level.id}" value="${level.name || ""}" /></label>`) 
       .join("");
+  };
+
+  const setTimeRuleInputs = ()=>{
+    const timeRules = skillSettings.timeRules || {};
+    if(timeRuleStartHourInput){
+      const val = timeRules.startHour?.hour;
+      timeRuleStartHourInput.value = typeof val === "number" ? String(val) : "";
+    }
+    if(timeRuleStartColorInput){
+      timeRuleStartColorInput.value = timeRules.startHour?.color || "";
+    }
+    if(timeRuleEndHourInput){
+      const val = timeRules.endHour?.hour;
+      timeRuleEndHourInput.value = typeof val === "number" ? String(val) : "";
+    }
+    if(timeRuleEndColorInput){
+      timeRuleEndColorInput.value = timeRules.endHour?.color || "";
+    }
   };
 
   const collectSkillLevels = ()=>{
@@ -309,6 +346,7 @@ export function renderUsers(mount){
 
   resetTimeDefaults();
   renderSkillConfigInputs();
+  setTimeRuleInputs();
   renderSkillFields();
   buildTableHeader();
   updatePendingStatus();
@@ -321,6 +359,38 @@ export function renderUsers(mount){
     skillConfigForm.addEventListener("submit", async (e)=>{
       e.preventDefault();
       const fd = new FormData(skillConfigForm);
+      const parseHourInput = (raw, label)=>{
+        if(!raw) return null;
+        const num = Number(raw);
+        if(!Number.isInteger(num) || num < 0 || num > 23){
+          toast(`${label}は0〜23の整数で入力してください`,"error");
+          return null;
+        }
+        return num;
+      };
+      const startHourRaw = (fd.get("timeRuleStartHour") || "").toString().trim();
+      const startColorRaw = (fd.get("timeRuleStartColor") || "").toString().trim();
+      const endHourRaw = (fd.get("timeRuleEndHour") || "").toString().trim();
+      const endColorRaw = (fd.get("timeRuleEndColor") || "").toString().trim();
+      const startHour = parseHourInput(startHourRaw, "開始時間");
+      if(startHourRaw && startHour === null) return;
+      const endHour = parseHourInput(endHourRaw, "終了時間");
+      if(endHourRaw && endHour === null) return;
+      const timeRules = {};
+      if(startHour !== null){
+        if(!startColorRaw){
+          toast("開始時間の色を入力してください","error");
+          return;
+        }
+        timeRules.startHour = { hour: startHour, color: startColorRaw };
+      }
+      if(endHour !== null){
+        if(!endColorRaw){
+          toast("終了時間の色を入力してください","error");
+          return;
+        }
+        timeRules.endHour = { hour: endHour, color: endColorRaw };
+      }
       const next = {
         skills: skillSettings.skills.map((skill, idx)=>({
           id: skill.id,
@@ -329,7 +399,8 @@ export function renderUsers(mount){
         levels: skillSettings.levels.map((level, idx)=>({
           id: level.id,
           name: (fd.get(`levelName-${level.id}`) || `ステータス${idx + 1}`).toString().trim()
-        }))
+        })),
+        timeRules
       };
       try{
         const saved = await saveSkillSettings({
@@ -340,6 +411,7 @@ export function renderUsers(mount){
         skillSettings = saved;
         updateLevelOrder();
         renderSkillConfigInputs();
+        setTimeRuleInputs();
         renderSkillFields();
         buildTableHeader();
         renderTable();
@@ -740,6 +812,7 @@ export function renderUsers(mount){
         skillSettings = settings || { ...DEFAULT_SKILL_SETTINGS };
         updateLevelOrder();
         renderSkillConfigInputs();
+        setTimeRuleInputs();
         renderSkillFields();
         buildTableHeader();
         renderTable();

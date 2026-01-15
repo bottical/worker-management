@@ -285,6 +285,13 @@ export function makeFloor(
     return area?.floorLabel || floorId;
   }
 
+  function parseHour(value) {
+    if (!value || typeof value !== "string") return null;
+    const [hour] = value.split(":");
+    const parsed = Number.parseInt(hour, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
   function buildCardBody(info, areaId, floorId) {
     const body = document.createElement("div");
     body.className = "card-body";
@@ -309,6 +316,15 @@ export function makeFloor(
     time.className = "card-time";
     const meta = fmtRange(info.start, info.end);
     time.textContent = meta || "時間未設定";
+    const timeRules = _skillSettings?.timeRules || {};
+    const startHour = parseHour(info.start);
+    const endHour = parseHour(info.end);
+    if (timeRules.startHour && startHour !== null && startHour === timeRules.startHour.hour) {
+      time.style.background = timeRules.startHour.color;
+    }
+    if (timeRules.endHour && endHour !== null && endHour === timeRules.endHour.hour) {
+      time.style.background = timeRules.endHour.color;
+    }
 
     const memo = document.createElement("div");
     memo.className = "card-memo hint";

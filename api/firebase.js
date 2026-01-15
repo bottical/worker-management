@@ -414,7 +414,8 @@ export async function createAssignment({
   floorId,
   areaId,
   workerId,
-  isLeader,
+  timeNoteLeft = "",
+  timeNoteRight = "",
   order
 }) {
   assertUserSite({ userId, siteId });
@@ -444,7 +445,8 @@ export async function createAssignment({
     floorId: floorId || "",
     areaId: areaId || "",
     workerId,
-    isLeader: Boolean(isLeader),
+    timeNoteLeft: typeof timeNoteLeft === "string" ? timeNoteLeft : "",
+    timeNoteRight: typeof timeNoteRight === "string" ? timeNoteRight : "",
     order: typeof order === "number" ? order : 0,
     date: new Date().toISOString().slice(0, 10),
     inAt: serverTimestamp(),
@@ -507,17 +509,19 @@ export async function updateAssignmentArea({
 }
 
 /** 在籍のリーダー設定変更 */
-export async function updateAssignmentLeader({
+export async function updateAssignmentTimeNotes({
   userId,
   siteId,
   assignmentId,
-  isLeader
+  timeNoteLeft = "",
+  timeNoteRight = ""
 }) {
   assertUserSite({ userId, siteId });
   if (!assignmentId) return;
   const ref = siteDocument(userId, siteId, "assignments", assignmentId);
   await updateDoc(ref, {
-    isLeader: Boolean(isLeader),
+    timeNoteLeft: typeof timeNoteLeft === "string" ? timeNoteLeft : "",
+    timeNoteRight: typeof timeNoteRight === "string" ? timeNoteRight : "",
     updatedAt: serverTimestamp()
   });
 }
@@ -757,7 +761,6 @@ export async function saveDailyRoster({ userId, siteId, floorId, date, workers }
     workerId: w.workerId,
     name: w.name || "",
     areaId: w.areaId || "",
-    isLeader: Boolean(w.isLeader),
     mentorId: w.mentorId || "",
     groupOrder: typeof w.groupOrder === "number" ? w.groupOrder : 0
   }));
@@ -791,7 +794,6 @@ export async function getDailyRoster({ userId, siteId, floorId, date }) {
         workerId: w.workerId,
         name: w.name || w.workerId,
         areaId: w.areaId || "",
-        isLeader: Boolean(w.isLeader),
         mentorId: w.mentorId || "",
         groupOrder: typeof w.groupOrder === "number" ? w.groupOrder : 0
       }))

@@ -44,14 +44,6 @@ function buildCardBody(worker) {
   const header = document.createElement("div");
   header.className = "card-header";
 
-  if (worker.isLeader) {
-    const leader = document.createElement("span");
-    leader.className = "leader-mark";
-    leader.title = "リーダー";
-    leader.textContent = "★";
-    header.appendChild(leader);
-  }
-
   const name = document.createElement("div");
   name.className = "card-name";
   name.textContent = worker.name || worker.workerId || "?";

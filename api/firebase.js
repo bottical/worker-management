@@ -49,7 +49,8 @@ export const DEFAULT_SKILL_SETTINGS = {
     { id: "level1", name: "経験なし" },
     { id: "level2", name: "経験あり" },
     { id: "level3", name: "プロ" }
-  ]
+  ],
+  timeRules: {}
 };
 
 function areaDocId(siteId, floorId) {
@@ -181,6 +182,28 @@ function normalizeSkillSettings(settings = {}) {
     return { id: def.id, name: name || def.name };
   });
 
+  const hasTimeRules = Object.prototype.hasOwnProperty.call(settings, "timeRules");
+  const timeRulesSource = settings.timeRules || {};
+  const normalizeTimeRule = (rule = {}) => {
+    if (!rule) return null;
+    const hour = Number(rule.hour);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) return null;
+    const color = typeof rule.color === "string" ? rule.color.trim() : "";
+    if (!color) return null;
+    return { hour, color };
+  };
+  const timeRules = {};
+  const startHour = normalizeTimeRule(timeRulesSource.startHour);
+  const endHour = normalizeTimeRule(timeRulesSource.endHour);
+  if (startHour) timeRules.startHour = startHour;
+  if (endHour) timeRules.endHour = endHour;
+
+  if (hasTimeRules) {
+    return { skills, levels, timeRules };
+  }
+  if (Object.keys(timeRules).length) {
+    return { skills, levels, timeRules };
+  }
   return { skills, levels };
 }
 

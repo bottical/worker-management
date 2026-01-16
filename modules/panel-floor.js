@@ -1431,19 +1431,27 @@ export function makeFloor(
 
   zonesEl.addEventListener("dragover", (e) => {
     if (_readOnly) return;
-    const context = resolveDropContext(e);
-    if (context) return;
     const type = e.dataTransfer?.getData("type");
     if (type !== "placed") return;
-    e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = "move";
+
+    // zonesEl が event target になる “隙間/余白” ケースでも、下のzoneを拾って許可する
+    const context = resolveDropContext(e);
+    if (context?.zone) {
+      e.preventDefault();
+      context.zone.classList.add("dragover");
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+      // プレースホルダ表示（zone側dragover相当）
+      const insertIndex = findInsertIndex(context.drop, e.clientY);
+      showPlaceholder(context.drop, insertIndex);
+      return;
     }
+
+    // zoneが拾えない場合でも drop 自体は許可（後段で未割当に落とす）
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
   });
 
   zonesEl.addEventListener("drop", async (e) => {
-    const context = resolveDropContext(e);
-    if (context) return;
     if (_readOnly) {
       e.preventDefault();
       cleanupDragState();
@@ -1454,10 +1462,23 @@ export function makeFloor(
       cleanupDragState();
       return;
     }
+
+    // まず “下にあるzone” に委譲して通常のエリアドロップとして処理
+    const context = resolveDropContext(e);
+    if (context?.drop) {
+      try {
+        await handleAreaDrop(e, context.drop);
+      } finally {
+        cleanupDragState();
+      }
+      return;
+    }
+
+    // zoneすら拾えない＝完全なエリア外（床の余白など）
+    // → 未割当（fallback）に戻す
     try {
-      await handlePoolDrop(e);
-    } catch (err) {
-      handleActionError("在籍のOUT処理に失敗しました", err);
+      const fallbackDrop = ensureFallbackZone(currentSite.floorId || "");
+      await handleAreaDrop(e, fallbackDrop);
     } finally {
       cleanupDragState();
     }

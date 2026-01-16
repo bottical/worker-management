@@ -754,12 +754,18 @@ export function makeFloor(
         );
         const boundedIndex = Math.max(0, Math.min(insertIndex, targetList.length));
         const movingEntry = movingRow
-          ? { ...movingRow, areaId: targetAreaId, floorId: dropFloorId }
+          ? {
+              ...movingRow,
+              areaId: targetAreaId,
+              floorId: dropFloorId,
+              updatedAt: Date.now()
+            }
           : {
               id: assignmentId,
               workerId,
               areaId: targetAreaId,
-              floorId: dropFloorId
+              floorId: dropFloorId,
+              updatedAt: Date.now()
             };
         targetList.splice(boundedIndex, 0, movingEntry);
 
@@ -854,7 +860,27 @@ export function makeFloor(
 
   // 外部（Dashboard）から呼ばれる：在籍スナップショットの反映
   function updateFromAssignments(rows) {
-    currentAssignments = Array.isArray(rows) ? rows.slice() : [];
+    const incoming = Array.isArray(rows) ? rows.slice() : [];
+    const incomingMap = new Map(incoming.map((row) => [row.id, row]));
+    const localMap = new Map(currentAssignments.map((row) => [row.id, row]));
+    const merged = [];
+    const ids = new Set([...incomingMap.keys(), ...localMap.keys()]);
+    ids.forEach((id) => {
+      const incomingRow = incomingMap.get(id);
+      const localRow = localMap.get(id);
+      if (!incomingRow) {
+        if (localRow) merged.push(localRow);
+        return;
+      }
+      if (!localRow) {
+        merged.push(incomingRow);
+        return;
+      }
+      const incomingUpdated = timestampToMillis(incomingRow.updatedAt);
+      const localUpdated = timestampToMillis(localRow.updatedAt);
+      merged.push(localUpdated > incomingUpdated ? localRow : incomingRow);
+    });
+    currentAssignments = merged;
     renderAssignments();
   }
 

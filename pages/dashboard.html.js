@@ -505,6 +505,7 @@ export function renderDashboard(mount) {
     (settings) => {
       skillSettings = settings || { ...DEFAULT_SKILL_SETTINGS };
       floorApi.setSkillSettings(skillSettings);
+      workerEditor.refreshSkillOptions?.();
       reconcile();
     }
   );
@@ -895,6 +896,7 @@ export function renderDashboard(mount) {
           <label>時間メモ（左）<input name="timeNoteLeft" maxlength="6" placeholder="例: 休"></label>
           <label>時間メモ（右）<input name="timeNoteRight" maxlength="6" placeholder="例: 遅"></label>
           <label>備考<textarea name="memo" placeholder="メモや特記事項"></textarea></label>
+          <div class="skill-levels" data-skill-levels></div>
           <div class="actions">
             <button type="button" class="button ghost" data-cancel>閉じる</button>
             <button type="submit" class="button" data-save>保存</button>
@@ -914,12 +916,83 @@ export function renderDashboard(mount) {
     const timeNoteLeftInput = overlay.querySelector('input[name="timeNoteLeft"]');
     const timeNoteRightInput = overlay.querySelector('input[name="timeNoteRight"]');
     const memoInput = overlay.querySelector('textarea[name="memo"]');
+    const skillLevelsWrap = overlay.querySelector("[data-skill-levels]");
     let currentWorkerId = "";
     let currentAssignmentId = "";
     let currentSkillLevels = {};
 
     function close() {
       overlay.classList.remove("show");
+    }
+
+    function normalizeSkillList(settings = skillSettings) {
+      const baseSkills = Array.isArray(settings?.skills)
+        ? settings.skills
+        : DEFAULT_SKILL_SETTINGS.skills;
+      return Array.from({ length: 4 }, (_, idx) => {
+        const skill = baseSkills[idx] || {};
+        return {
+          id: skill?.id || `skill${idx + 1}`,
+          name: skill?.name || `スキル${idx + 1}`
+        };
+      });
+    }
+
+    function normalizeLevelList(settings = skillSettings) {
+      return Array.isArray(settings?.levels)
+        ? settings.levels
+        : DEFAULT_SKILL_SETTINGS.levels;
+    }
+
+    function collectSkillLevelsFromForm() {
+      if (!skillLevelsWrap) return {};
+      const next = {};
+      skillLevelsWrap
+        .querySelectorAll('select[data-skill-id]')
+        .forEach((select) => {
+          const skillId = select.dataset.skillId;
+          const value = select.value || "";
+          if (!skillId || !value) return;
+          next[skillId] = value;
+        });
+      return normalizeSkillLevels(next);
+    }
+
+    function applySkillLevelValues(levels = currentSkillLevels) {
+      if (!skillLevelsWrap) return;
+      skillLevelsWrap
+        .querySelectorAll('select[data-skill-id]')
+        .forEach((select) => {
+          const skillId = select.dataset.skillId;
+          select.value = levels?.[skillId] || "";
+        });
+    }
+
+    function renderSkillLevelInputs() {
+      if (!skillLevelsWrap) return;
+      skillLevelsWrap.innerHTML = "";
+      const skills = normalizeSkillList();
+      const levels = normalizeLevelList();
+      skills.forEach((skill) => {
+        const label = document.createElement("label");
+        label.textContent = skill.name;
+        const select = document.createElement("select");
+        select.dataset.skillId = skill.id;
+        const emptyOption = document.createElement("option");
+        emptyOption.value = "";
+        emptyOption.textContent = "未設定";
+        select.appendChild(emptyOption);
+        levels.forEach((level) => {
+          if (!level?.id) return;
+          const option = document.createElement("option");
+          option.value = level.id;
+          option.textContent = level.label || level.name || level.id;
+          select.appendChild(option);
+        });
+        label.appendChild(select);
+        skillLevelsWrap.appendChild(label);
+      });
+      applySkillLevelValues();
     }
 
     function setTimeNoteInputsEnabled(enabled) {
@@ -956,6 +1029,7 @@ export function renderDashboard(mount) {
       setTimeNoteInputsEnabled(Boolean(currentAssignmentId) && !isReadOnly);
       memoInput.value = worker.memo || "";
       currentSkillLevels = normalizeSkillLevels(worker.skillLevels);
+      renderSkillLevelInputs();
       overlay.classList.add("show");
       nameInput.focus();
     }
@@ -984,7 +1058,7 @@ export function renderDashboard(mount) {
         employmentCount: Number(countInput.value || 0),
         memo: memoInput.value || "",
         active: true,
-        skillLevels: currentSkillLevels
+        skillLevels: collectSkillLevelsFromForm()
       };
       const timeNoteLeft = timeNoteLeftInput?.value?.trim() || "";
       const timeNoteRight = timeNoteRightInput?.value?.trim() || "";
@@ -1022,7 +1096,12 @@ export function renderDashboard(mount) {
       }
     });
 
-    return { open, close };
+    function refreshSkillOptions() {
+      currentSkillLevels = collectSkillLevelsFromForm();
+      renderSkillLevelInputs();
+    }
+
+    return { open, close, refreshSkillOptions };
   }
 
   // アンマウント

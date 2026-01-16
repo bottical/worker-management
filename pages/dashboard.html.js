@@ -892,7 +892,6 @@ export function renderDashboard(mount) {
           <label>開始時刻<input type="time" name="defaultStartTime"></label>
           <label>終了時刻<input type="time" name="defaultEndTime"></label>
           <label>就業回数<input type="number" name="employmentCount" min="0"></label>
-          <label>表示色<input name="panelColor" placeholder="#2563eb"></label>
           <label>時間メモ（左）<input name="timeNoteLeft" maxlength="6" placeholder="例: 休"></label>
           <label>時間メモ（右）<input name="timeNoteRight" maxlength="6" placeholder="例: 遅"></label>
           <label>備考<textarea name="memo" placeholder="メモや特記事項"></textarea></label>
@@ -912,7 +911,6 @@ export function renderDashboard(mount) {
     const startInput = overlay.querySelector('input[name="defaultStartTime"]');
     const endInput = overlay.querySelector('input[name="defaultEndTime"]');
     const countInput = overlay.querySelector('input[name="employmentCount"]');
-    const colorInput = overlay.querySelector('input[name="panelColor"]');
     const timeNoteLeftInput = overlay.querySelector('input[name="timeNoteLeft"]');
     const timeNoteRightInput = overlay.querySelector('input[name="timeNoteRight"]');
     const memoInput = overlay.querySelector('textarea[name="memo"]');
@@ -945,7 +943,6 @@ export function renderDashboard(mount) {
       startInput.value = worker.defaultStartTime || "";
       endInput.value = worker.defaultEndTime || "";
       countInput.value = Number(worker.employmentCount || 0);
-      colorInput.value = worker.panelColor || "";
       if (timeNoteLeftInput) {
         timeNoteLeftInput.value =
           typeof assignment?.timeNoteLeft === "string" ? assignment.timeNoteLeft : "";
@@ -986,7 +983,6 @@ export function renderDashboard(mount) {
         defaultEndTime: endInput.value || "",
         employmentCount: Number(countInput.value || 0),
         memo: memoInput.value || "",
-        panel: { color: colorInput.value.trim() || "" },
         active: true,
         skillLevels: currentSkillLevels
       };

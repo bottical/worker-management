@@ -338,6 +338,7 @@ export function renderDashboard(mount) {
     }
   );
   makePool(poolEl, state.site);
+  floorApi.setPoolDropzone?.(poolEl);
 
   // 購読状態
   let latestAssignmentsAll = [];

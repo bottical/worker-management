@@ -30,6 +30,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card.pool-card .card-action{top:4px;right:4px}
 .card.readonly{cursor:default;opacity:.85}
 .card.dragging{opacity:.6}
+.drag-overlay{pointer-events:none !important}
 .cards.dragover{outline:3px dashed var(--accent);outline-offset:-6px}
 .card-action{position:absolute;top:6px;right:6px;border:1px solid var(--border);background:#f8fafc;color:var(--muted);border-radius:8px;padding:4px 6px;font-size:12px;cursor:pointer;line-height:1;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility .15s ease}
 .card:hover .card-action{opacity:1;visibility:visible;pointer-events:auto}

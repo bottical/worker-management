@@ -1485,11 +1485,15 @@ export function makeFloor(
   });
 
   window.addEventListener("mouseup", handleGlobalDragCleanup);
+  window.addEventListener("dragend", handleGlobalDragCleanup, true);
+  window.addEventListener("drop", handleGlobalDragCleanup, true);
   document.addEventListener("visibilitychange", handleGlobalDragCleanup);
 
   // アンマウント
   api.unmount = () => {
     window.removeEventListener("mouseup", handleGlobalDragCleanup);
+    window.removeEventListener("dragend", handleGlobalDragCleanup, true);
+    window.removeEventListener("drop", handleGlobalDragCleanup, true);
     document.removeEventListener("visibilitychange", handleGlobalDragCleanup);
     if (window.__floorRender) delete window.__floorRender;
     mount.innerHTML = "";

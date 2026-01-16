@@ -421,8 +421,12 @@ export function renderDashboard(mount) {
       ? latestAssignmentsAll.filter((a) => a.floorId === currentFloorId)
       : latestAssignmentsAll.slice();
     const displayAssignments = assignmentsForView.slice();
-    const assignedForFloor = new Set(assignmentsForView.map((r) => r.workerId));
-    const assignedAll = new Set(latestAssignmentsAll.map((r) => r.workerId));
+    const assignedForFloor = new Set(
+      assignmentsForView.filter((r) => r.areaId).map((r) => r.workerId)
+    );
+    const assignedAll = new Set(
+      latestAssignmentsAll.filter((r) => r.areaId).map((r) => r.workerId)
+    );
 
     if (isReadOnly && rosterEntries.size) {
       const pseudoAssignments = [];

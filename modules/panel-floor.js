@@ -1,8 +1,8 @@
 // modules/panel-floor.js
 import {
   createAssignment,
-  closeAssignment,
   updateAssignmentsOrder,
+  updateAssignmentArea,
   DEFAULT_AREAS,
   DEFAULT_SKILL_SETTINGS
 } from "../api/firebase.js";
@@ -846,6 +846,72 @@ export function makeFloor(
     }
   }
 
+  async function handleUnplaceDrop(e) {
+    if (_readOnly) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    const type = e.dataTransfer?.getData("type");
+    if (type !== "placed") return;
+    const assignmentId = e.dataTransfer.getData("assignmentId");
+    if (!assignmentId) return;
+    const state = dragStates.get(assignmentId);
+    if (state) state.handled = true;
+    if (!currentSite?.userId || !currentSite?.siteId) {
+      notifyMissingContext();
+      return;
+    }
+    const movingRow = currentAssignments.find((row) => row.id === assignmentId);
+    if (!movingRow || !movingRow.areaId) return;
+
+    const fromArea = normalizeAreaId(movingRow.areaId);
+    const fromFloor = movingRow.floorId || "";
+    const sourceKey = areaKey(fromArea, fromFloor);
+    const assignmentsByArea = groupAssignments();
+    const sourceList = sortAssignments(assignmentsByArea.get(sourceKey) || []).filter(
+      (row) => row.id !== assignmentId
+    );
+
+    const updates = sourceList.map((row, idx) => ({
+      assignmentId: row.id,
+      areaId: row.areaId || fromArea,
+      floorId: row.floorId || fromFloor,
+      order: idx
+    }));
+
+    currentAssignments = currentAssignments.map((row) =>
+      row.id === assignmentId
+        ? { ...row, areaId: null, updatedAt: Date.now() }
+        : row
+    );
+    renderAssignments();
+
+    console.info("[Floor] unplacing assignment", {
+      assignmentId,
+      fromArea,
+      fromFloor
+    });
+    await persistOrders(updates, "配置の更新に失敗しました");
+    await updateAssignmentArea({
+      userId: currentSite.userId,
+      siteId: currentSite.siteId,
+      assignmentId,
+      areaId: null,
+      floorId: fromFloor
+    });
+    const mentorship = getMentorship(movingRow.workerId);
+    if (mentorship.mentorId) {
+      await requestMentorshipChange({
+        workerId: movingRow.workerId,
+        mentorId: "",
+        areaId: "",
+        floorId: fromFloor,
+        groupOrder: 0
+      });
+    }
+  }
+
   function setupDropzone(zone) {
     if (!zone || zone.dataset.bound === "true") return;
     zone.dataset.bound = "true";
@@ -893,38 +959,12 @@ export function makeFloor(
     poolEl.addEventListener("drop", async (e) => {
       poolEl.classList.remove("dragover");
       try {
-        await handlePoolDrop(e);
+        await handleUnplaceDrop(e);
       } catch (err) {
-        handleActionError("在籍のOUT処理に失敗しました", err);
+        handleActionError("未配置の更新に失敗しました", err);
       } finally {
         cleanupDragState();
       }
-    });
-  }
-
-  async function handlePoolDrop(e) {
-    if (_readOnly) {
-      e.preventDefault();
-      return;
-    }
-    e.preventDefault();
-    const type = e.dataTransfer.getData("type");
-    if (type !== "placed") return;
-    const assignmentId = e.dataTransfer.getData("assignmentId");
-    const state = dragStates.get(assignmentId);
-    if (state) state.handled = true;
-    if (!currentSite?.userId || !currentSite?.siteId) {
-      notifyMissingContext();
-      return;
-    }
-    if (!assignmentId) return;
-    currentAssignments = currentAssignments.filter((row) => row.id !== assignmentId);
-    renderAssignments();
-    console.info("[Floor] closing assignment via pool drop", { assignmentId });
-    await closeAssignment({
-      userId: currentSite.userId,
-      siteId: currentSite.siteId,
-      assignmentId
     });
   }
 
@@ -1031,11 +1071,13 @@ export function makeFloor(
       if (drop) drop.innerHTML = "";
     });
     const activeFallbackFloors = new Set();
-    const normalizedAssignments = (currentAssignments || []).map((r) => ({
-      ...r,
-      areaId: normalizeAreaId(r.areaId),
-      floorId: r.floorId || currentSite.floorId || _areas[0]?.floorId || ""
-    }));
+    const normalizedAssignments = (currentAssignments || [])
+      .filter((r) => r.areaId)
+      .map((r) => ({
+        ...r,
+        areaId: normalizeAreaId(r.areaId),
+        floorId: r.floorId || currentSite.floorId || _areas[0]?.floorId || ""
+      }));
 
     const grouped = groupAssignments(normalizedAssignments);
     grouped.forEach((list = []) => {
@@ -1446,7 +1488,7 @@ export function makeFloor(
       return;
     }
 
-    // zoneが拾えない場合でも drop 自体は許可（後段で未割当に落とす）
+    // zoneが拾えない場合でも drop 自体は許可（後段で未配置に戻す）
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
   });
@@ -1475,10 +1517,9 @@ export function makeFloor(
     }
 
     // zoneすら拾えない＝完全なエリア外（床の余白など）
-    // → 未割当（fallback）に戻す
+    // → 未配置（pool）に戻す
     try {
-      const fallbackDrop = ensureFallbackZone(currentSite.floorId || "");
-      await handleAreaDrop(e, fallbackDrop);
+      await handleUnplaceDrop(e);
     } finally {
       cleanupDragState();
     }

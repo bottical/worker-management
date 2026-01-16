@@ -158,6 +158,24 @@ export function makeFloor(
     }
   };
 
+  const handleDocumentDropCapture = async (e) => {
+    if (_readOnly) return;
+    const type = e.dataTransfer?.getData("type");
+    if (type !== "placed") return;
+
+    const inZone = e.target?.closest?.(".zone");
+    const inPool = poolDropEl && (e.target === poolDropEl || poolDropEl.contains(e.target));
+    if (inZone || inPool) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await handleUnplaceDrop(e);
+    } finally {
+      cleanupDragState();
+    }
+  };
+
   const handleDocumentKeydown = (e) => {
     if (e.key === "Escape") {
       handleGlobalDragCleanup();
@@ -872,6 +890,12 @@ export function makeFloor(
       return;
     }
     e.preventDefault();
+    console.info("[DnD] handleUnplaceDrop fired", {
+      type: e.dataTransfer?.getData("type"),
+      assignmentId: e.dataTransfer?.getData("assignmentId"),
+      fromAreaId: e.dataTransfer?.getData("fromAreaId"),
+      fromFloorId: e.dataTransfer?.getData("fromFloorId")
+    });
     const type = e.dataTransfer?.getData("type");
     if (type !== "placed") return;
     const assignmentId = e.dataTransfer.getData("assignmentId");
@@ -1005,6 +1029,10 @@ export function makeFloor(
       }
     });
     poolEl.addEventListener("drop", async (e) => {
+      console.info("[DnD] pool drop fired", {
+        target: e.target,
+        type: e.dataTransfer?.getData("type")
+      });
       poolEl.classList.remove("dragover");
       try {
         await handleUnplaceDrop(e);
@@ -1190,7 +1218,6 @@ export function makeFloor(
     } else {
       cleanupFallbackZones(new Set());
     }
-    renderPool(unplacedAssignments);
     renderMentorshipLines();
   }
 
@@ -1569,6 +1596,10 @@ export function makeFloor(
   });
 
   zonesEl.addEventListener("drop", async (e) => {
+    console.info("[DnD] zonesEl drop fired", {
+      target: e.target,
+      type: e.dataTransfer?.getData("type")
+    });
     if (_readOnly) {
       e.preventDefault();
       cleanupDragState();
@@ -1605,6 +1636,7 @@ export function makeFloor(
   window.addEventListener("drop", handleGlobalDragCleanup, true);
   window.addEventListener("blur", handleGlobalDragCleanup);
   document.addEventListener("keydown", handleDocumentKeydown);
+  document.addEventListener("drop", handleDocumentDropCapture, true);
   document.addEventListener("visibilitychange", handleGlobalDragCleanup);
 
   // アンマウント
@@ -1615,6 +1647,7 @@ export function makeFloor(
     window.removeEventListener("blur", handleGlobalDragCleanup);
     document.removeEventListener("keydown", handleDocumentKeydown);
     document.removeEventListener("dragover", handleDocumentDragover, { capture: true });
+    document.removeEventListener("drop", handleDocumentDropCapture, true);
     document.removeEventListener("visibilitychange", handleGlobalDragCleanup);
     if (window.__floorRender) delete window.__floorRender;
     mount.innerHTML = "";

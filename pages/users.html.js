@@ -100,7 +100,6 @@ export function renderUsers(mount){
               <option value="false">無効</option>
             </select>
           </label>
-          <label>カード色<input name="panelColor" placeholder="#e2e8f0"></label>
           <label>就業回数<input name="employmentCount" type="number" min="0" step="1" value="0" placeholder="0"></label>
           <div id="skillFields" style="grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px"></div>
           <label style="grid-column:1/-1">備考<textarea name="memo" rows="2" placeholder="メモを入力"></textarea></label>
@@ -347,7 +346,6 @@ export function renderUsers(mount){
       { key: "defaultStartTime", label: "Start" },
       { key: "defaultEndTime", label: "End" },
       { key: "active", label: "active" },
-      { key: "panelColor", label: "カード色" },
       { key: "employmentCount", label: "就業回数" },
       { key: "memo", label: "備考" }
     ];
@@ -584,9 +582,6 @@ export function renderUsers(mount){
     if(key === "defaultEndTime"){
       return row.defaultEndTime || DEFAULT_END;
     }
-    if(key === "panelColor"){
-      return row.panel?.color || row.panelColor || "";
-    }
     if(key === "employmentCount"){
       return Number(row.employmentCount || 0);
     }
@@ -603,7 +598,6 @@ export function renderUsers(mount){
     defaultStartTime: worker.defaultStartTime || DEFAULT_START,
     defaultEndTime: worker.defaultEndTime || DEFAULT_END,
     active: !!worker.active,
-    panelColor: worker.panel?.color || worker.panelColor || "",
     employmentCount: Number(worker.employmentCount || 0),
     memo: worker.memo || "",
     skillLevels: normalizeSkillLevels(worker.skillLevels)
@@ -621,7 +615,6 @@ export function renderUsers(mount){
     const defaultStartTime = tr.querySelector('input[data-field="defaultStartTime"]')?.value || DEFAULT_START;
     const defaultEndTime = tr.querySelector('input[data-field="defaultEndTime"]')?.value || DEFAULT_END;
     const active = (tr.querySelector('select[data-field="active"]')?.value || "true") === "true";
-    const panelColor = tr.querySelector('input[data-field="panelColor"]')?.value || "";
     const employmentCount = Number(tr.querySelector('input[data-field="employmentCount"]')?.value || 0);
     const memo = tr.querySelector('textarea[data-field="memo"]')?.value || "";
     const skillLevels = {};
@@ -640,15 +633,15 @@ export function renderUsers(mount){
       })
       .filter(Boolean);
 
+    const { panel, panelColor, ...restBase } = base;
     return {
-      ...base,
+      ...restBase,
       workerId,
       name,
       company,
       defaultStartTime,
       defaultEndTime,
       active,
-      panelColor,
       employmentCount,
       memo,
       skillLevels,
@@ -671,7 +664,6 @@ export function renderUsers(mount){
     setVal('input[data-field="defaultStartTime"]', data.defaultStartTime || DEFAULT_START);
     setVal('input[data-field="defaultEndTime"]', data.defaultEndTime || DEFAULT_END);
     setVal('select[data-field="active"]', data.active ? "true" : "false");
-    setVal('input[data-field="panelColor"]', data.panel?.color || data.panelColor || "");
     setVal('input[data-field="employmentCount"]', Number(data.employmentCount || 0));
     setVal('textarea[data-field="memo"]', data.memo || "");
     tr.querySelectorAll('select[data-field="skill"]').forEach((select)=>{
@@ -801,7 +793,6 @@ export function renderUsers(mount){
             <option value="false" ${source.active === false ? "selected" : ""}>無効</option>
           </select>
         </td>
-        <td><input data-field="panelColor" value="${source.panel?.color || source.panelColor || ""}" placeholder="#e2e8f0"></td>
         <td class="mono"><input data-field="employmentCount" type="number" min="0" step="1" value="${employmentCount}" style="width:100%"></td>
         <td><textarea data-field="memo" rows="1">${memo}</textarea></td>
         <td class="row-actions" style="white-space:nowrap">

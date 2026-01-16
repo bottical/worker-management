@@ -432,15 +432,7 @@ export function makeFloor(
     );
     const body = buildCardBody(info, areaId, floorId, timeNotes);
 
-    const badgeRow = document.createElement("div");
-    badgeRow.className = "card-badges";
     let detachBtn = null;
-    if (role === "mentor") {
-      const mentorBadge = document.createElement("span");
-      mentorBadge.className = "badge badge-mentor";
-      mentorBadge.textContent = "教育者";
-      badgeRow.appendChild(mentorBadge);
-    }
     if (role === "mentee") {
       if (typeof onDetach === "function") {
         detachBtn = document.createElement("button");
@@ -454,9 +446,6 @@ export function makeFloor(
           onDetach();
         });
       }
-    }
-    if (badgeRow.children.length) {
-      body.insertBefore(badgeRow, body.firstChild);
     }
 
     const settingsBtn = document.createElement("button");
@@ -1019,6 +1008,7 @@ export function makeFloor(
     const cardByWorkerId = new Map(cards.map((card) => [card.dataset.workerId, card]));
 
     const groups = new Map();
+    const LINE_WIDTH = 6;
 
     mentorshipMap.forEach((meta, menteeId) => {
       const mentorId = meta?.mentorId;
@@ -1079,6 +1069,9 @@ export function makeFloor(
       thread.dataset.mentorId = mentorId;
       thread.style.top = `${offsetTop}px`;
       thread.style.height = `${height}px`;
+      thread.style.width = `${LINE_WIDTH}px`;
+      const lineX = getComputedStyle(drop).getPropertyValue("--mentor-line-x").trim() || "20%";
+      thread.style.left = `calc(${lineX} - ${LINE_WIDTH / 2}px)`;
 
       drop.appendChild(thread);
     });

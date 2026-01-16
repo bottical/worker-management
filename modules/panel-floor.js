@@ -144,6 +144,10 @@ export function makeFloor(
     clearActivePlaceholder();
   }
 
+  const handleGlobalDragCleanup = () => {
+    cleanupDragState();
+  };
+
   function showPlaceholder(dropEl, index) {
     const placeholder = ensurePlaceholder(dropEl);
     if (activePlaceholderDrop && activePlaceholderDrop !== dropEl) {
@@ -888,43 +892,39 @@ export function makeFloor(
     });
     poolEl.addEventListener("drop", async (e) => {
       poolEl.classList.remove("dragover");
-      if (_readOnly) {
-        e.preventDefault();
-        cleanupDragState();
-        return;
-      }
-      e.preventDefault();
-      const type = e.dataTransfer.getData("type");
-      if (type !== "placed") {
-        cleanupDragState();
-        return;
-      }
-      const assignmentId = e.dataTransfer.getData("assignmentId");
-      const state = dragStates.get(assignmentId);
-      if (state) state.handled = true;
-      if (!currentSite?.userId || !currentSite?.siteId) {
-        notifyMissingContext();
-        cleanupDragState();
-        return;
-      }
-      if (!assignmentId) {
-        cleanupDragState();
-        return;
-      }
-      currentAssignments = currentAssignments.filter((row) => row.id !== assignmentId);
-      renderAssignments();
       try {
-        console.info("[Floor] closing assignment via pool drop", { assignmentId });
-        await closeAssignment({
-          userId: currentSite.userId,
-          siteId: currentSite.siteId,
-          assignmentId
-        });
+        await handlePoolDrop(e);
       } catch (err) {
         handleActionError("在籍のOUT処理に失敗しました", err);
       } finally {
         cleanupDragState();
       }
+    });
+  }
+
+  async function handlePoolDrop(e) {
+    if (_readOnly) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    const type = e.dataTransfer.getData("type");
+    if (type !== "placed") return;
+    const assignmentId = e.dataTransfer.getData("assignmentId");
+    const state = dragStates.get(assignmentId);
+    if (state) state.handled = true;
+    if (!currentSite?.userId || !currentSite?.siteId) {
+      notifyMissingContext();
+      return;
+    }
+    if (!assignmentId) return;
+    currentAssignments = currentAssignments.filter((row) => row.id !== assignmentId);
+    renderAssignments();
+    console.info("[Floor] closing assignment via pool drop", { assignmentId });
+    await closeAssignment({
+      userId: currentSite.userId,
+      siteId: currentSite.siteId,
+      assignmentId
     });
   }
 
@@ -1429,8 +1429,47 @@ export function makeFloor(
   };
   window.__floorRender = api;
 
+  zonesEl.addEventListener("dragover", (e) => {
+    if (_readOnly) return;
+    const context = resolveDropContext(e);
+    if (context) return;
+    const type = e.dataTransfer?.getData("type");
+    if (type !== "placed") return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "move";
+    }
+  });
+
+  zonesEl.addEventListener("drop", async (e) => {
+    const context = resolveDropContext(e);
+    if (context) return;
+    if (_readOnly) {
+      e.preventDefault();
+      cleanupDragState();
+      return;
+    }
+    const type = e.dataTransfer?.getData("type");
+    if (type !== "placed") {
+      cleanupDragState();
+      return;
+    }
+    try {
+      await handlePoolDrop(e);
+    } catch (err) {
+      handleActionError("在籍のOUT処理に失敗しました", err);
+    } finally {
+      cleanupDragState();
+    }
+  });
+
+  window.addEventListener("mouseup", handleGlobalDragCleanup);
+  document.addEventListener("visibilitychange", handleGlobalDragCleanup);
+
   // アンマウント
   api.unmount = () => {
+    window.removeEventListener("mouseup", handleGlobalDragCleanup);
+    document.removeEventListener("visibilitychange", handleGlobalDragCleanup);
     if (window.__floorRender) delete window.__floorRender;
     mount.innerHTML = "";
   };

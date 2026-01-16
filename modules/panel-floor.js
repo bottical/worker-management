@@ -163,9 +163,9 @@ export function makeFloor(
     const type = e.dataTransfer?.getData("type");
     if (type !== "placed") return;
 
-    const inZone = e.target?.closest?.(".zone");
+    const context = resolveDropContext(e);
     const inPool = poolDropEl && (e.target === poolDropEl || poolDropEl.contains(e.target));
-    if (inZone || inPool) return;
+    if (context?.zone || inPool) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -698,8 +698,15 @@ export function makeFloor(
   function resolveDropContext(e) {
     let el = e.target?.closest?.("[data-area-id], .zone");
     if (!el) {
-      const under = document.elementFromPoint(e.clientX, e.clientY);
-      el = under?.closest?.("[data-area-id], .zone");
+      const under = document.elementsFromPoint(e.clientX, e.clientY) || [];
+      const hit = under.find(
+        (node) =>
+          node &&
+          !node.classList?.contains("mentor-thread") &&
+          !node.classList?.contains("drag-overlay") &&
+          !node.classList?.contains("placeholder")
+      );
+      el = hit?.closest?.("[data-area-id], .zone");
     }
     const zone = el?.classList?.contains("zone") ? el : el?.closest?.(".zone");
     if (!zone) return null;
@@ -1313,6 +1320,7 @@ export function makeFloor(
       const thread = document.createElement("div");
       thread.className = "mentor-thread";
       thread.dataset.mentorId = mentorId;
+      thread.style.pointerEvents = "none";
       thread.style.top = `${offsetTop}px`;
       thread.style.height = `${height}px`;
       thread.style.width = `${LINE_WIDTH}px`;

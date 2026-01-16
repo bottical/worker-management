@@ -38,6 +38,7 @@ export function makeFloor(
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
   let mentorshipMap = new Map();
+  let poolDropEl = null;
   const { onEditWorker, onMentorshipChange } = options;
 
   function toPositiveInt(value) {
@@ -131,6 +132,16 @@ export function makeFloor(
     if (activePlaceholderDrop) {
       removePlaceholder(activePlaceholderDrop);
     }
+  }
+
+  function cleanupDragState() {
+    document.body.classList.remove("dragging");
+    document.querySelectorAll(".drag-overlay").forEach((el) => el.remove());
+    document.documentElement.style.pointerEvents = "";
+    zonesEl.querySelectorAll(".zone.dragover").forEach((zone) => {
+      zone.classList.remove("dragover");
+    });
+    clearActivePlaceholder();
   }
 
   function showPlaceholder(dropEl, index) {
@@ -614,6 +625,7 @@ export function makeFloor(
         return;
       }
       card.classList.add("dragging");
+      document.body.classList.add("dragging");
       const { dataTransfer } = e;
       dragStates.set(card.dataset.assignmentId, { handled: false });
       if (dataTransfer) {
@@ -632,24 +644,8 @@ export function makeFloor(
       const state = dragStates.get(assignmentId);
       dragStates.delete(assignmentId);
       clearActivePlaceholder();
-      const dropEffect = e.dataTransfer?.dropEffect;
-      const droppedOutside = !state?.handled && dropEffect !== "move";
-      if (_readOnly || !droppedOutside) return;
-      if (!currentSite?.userId || !currentSite?.siteId) {
-        notifyMissingContext();
-        return;
-      }
-      try {
-        console.info("[Floor] closing assignment via outside drop", {
-          assignmentId
-        });
-        await closeAssignment({
-          userId: currentSite.userId,
-          siteId: currentSite.siteId,
-          assignmentId
-        });
-      } catch (err) {
-        handleActionError("在籍のOUT処理に失敗しました", err);
+      if (!state?.handled) {
+        cleanupDragState();
       }
     });
     slot.appendChild(card);
@@ -657,204 +653,284 @@ export function makeFloor(
   }
 
   // ドロップターゲット（エリア）
-  function setupDropzone(drop) {
-    if (!drop || drop.dataset.bound === "true") return;
-    drop.dataset.bound = "true";
-    const zone = drop.closest(".zone");
-    drop.addEventListener("dragover", (e) => {
-      if (_readOnly) return;
-      e.preventDefault();
-      zone?.classList.add("dragover");
-      const insertIndex = findInsertIndex(drop, e.clientY);
-      showPlaceholder(drop, insertIndex);
-    });
-    drop.addEventListener("dragleave", (e) => {
-      if (!drop.contains(e.relatedTarget)) {
-        removePlaceholder(drop);
-        zone?.classList.remove("dragover");
-      }
-    });
-    drop.addEventListener("drop", async (e) => {
-      zone?.classList.remove("dragover");
-      if (_readOnly) {
-        e.preventDefault();
-        return;
-      }
-      clearActivePlaceholder();
-      e.preventDefault();
-      const type = e.dataTransfer.getData("type");
-      const areaId = drop.dataset.areaId;
-      const dropFloorId = drop.dataset.floorId || currentSite.floorId || "";
-      const isFallback = drop.dataset.fallback === "true";
-      const targetAreaId = isFallback ? FALLBACK_AREA_ID : normalizeAreaId(areaId);
-      const insertIndex = findInsertIndex(drop, e.clientY);
-      if (!currentSite?.userId || !currentSite?.siteId) {
-        notifyMissingContext();
-        return;
-      }
-      if (type === "pool") {
-        if (isFallback) {
-          toast("未割当エリアには直接配置できません", "error");
-          return;
-        }
-        // 未配置 → IN
-        const workerId = e.dataTransfer.getData("workerId");
-        const existing = getAreaAssignments(targetAreaId, dropFloorId);
-        const boundedIndex = Math.max(0, Math.min(insertIndex, existing.length));
-        const updates = existing.map((row, idx) => ({
-          assignmentId: row.id,
-          areaId: targetAreaId,
-          floorId: dropFloorId,
-          order: idx >= boundedIndex ? idx + 1 : idx
-        }));
-        if (updates.length) {
-          const orderMap = new Map(updates.map((u) => [u.assignmentId, u.order]));
-          currentAssignments = currentAssignments.map((row) =>
-            orderMap.has(row.id) ? { ...row, order: orderMap.get(row.id) } : row
-          );
-          renderAssignments();
-        }
-        console.info("[Floor] creating assignment", {
-          workerId,
-          areaId,
-          floorId: dropFloorId,
-          timeNoteLeft: "",
-          timeNoteRight: ""
-        });
-        try {
-          await persistOrders(updates);
-          await createAssignment({
-            userId: currentSite.userId,
-            siteId: currentSite.siteId,
-            floorId: dropFloorId,
-            areaId: targetAreaId,
-            workerId,
-            order: boundedIndex
-          });
-        } catch (err) {
-          handleActionError("配置の登録に失敗しました", err);
-        }
-      } else if (type === "placed") {
-        const assignmentId = e.dataTransfer.getData("assignmentId");
-        const state = dragStates.get(assignmentId);
-        if (state) state.handled = true;
-        const workerId = e.dataTransfer.getData("workerId");
-        const from = normalizeAreaId(e.dataTransfer.getData("fromAreaId"));
-        const fromFloor = e.dataTransfer.getData("fromFloorId") || "";
-        const sourceKey = areaKey(from, fromFloor);
-        const targetKey = areaKey(targetAreaId, dropFloorId);
-        const assignmentsByArea = groupAssignments();
-        const movingRow = currentAssignments.find((row) => row.id === assignmentId);
-        const originalTarget = sortAssignments(assignmentsByArea.get(targetKey) || []);
-        const sourceList = sortAssignments(assignmentsByArea.get(sourceKey) || []).filter(
-          (row) => row.id !== assignmentId
-        );
-        const targetList = sortAssignments(assignmentsByArea.get(targetKey) || []).filter(
-          (row) => row.id !== assignmentId
-        );
-        const boundedIndex = Math.max(0, Math.min(insertIndex, targetList.length));
-        const movingEntry = movingRow
-          ? {
-              ...movingRow,
-              areaId: targetAreaId,
-              floorId: dropFloorId,
-              updatedAt: Date.now()
-            }
-          : {
-              id: assignmentId,
-              workerId,
-              areaId: targetAreaId,
-              floorId: dropFloorId,
-              updatedAt: Date.now()
-            };
-        targetList.splice(boundedIndex, 0, movingEntry);
+  function resolveDropContext(e) {
+    let el = e.target?.closest?.("[data-area-id], .zone");
+    if (!el) {
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      el = under?.closest?.("[data-area-id], .zone");
+    }
+    const zone = el?.classList?.contains("zone") ? el : el?.closest?.(".zone");
+    if (!zone) return null;
+    const drop = zone.querySelector(".droparea");
+    if (!drop) return null;
+    return { zone, drop };
+  }
 
-        const updates = [];
-        if (targetKey === sourceKey) {
-          const unchanged =
-            originalTarget.length === targetList.length &&
-            originalTarget.every((row, idx) => row.id === targetList[idx].id);
-          if (unchanged) return;
-        }
-        targetList.forEach((row, idx) => {
+  async function handleAreaDrop(e, drop) {
+    const zone = drop.closest(".zone");
+    zone?.classList.remove("dragover");
+    if (_readOnly) {
+      e.preventDefault();
+      return;
+    }
+    clearActivePlaceholder();
+    e.preventDefault();
+    const type = e.dataTransfer.getData("type");
+    const areaId = drop.dataset.areaId;
+    const dropFloorId = drop.dataset.floorId || currentSite.floorId || "";
+    const isFallback = drop.dataset.fallback === "true";
+    const targetAreaId = isFallback ? FALLBACK_AREA_ID : normalizeAreaId(areaId);
+    const insertIndex = findInsertIndex(drop, e.clientY);
+    if (!currentSite?.userId || !currentSite?.siteId) {
+      notifyMissingContext();
+      return;
+    }
+    if (type === "pool") {
+      if (isFallback) {
+        toast("未割当エリアには直接配置できません", "error");
+        return;
+      }
+      // 未配置 → IN
+      const workerId = e.dataTransfer.getData("workerId");
+      const existing = getAreaAssignments(targetAreaId, dropFloorId);
+      const boundedIndex = Math.max(0, Math.min(insertIndex, existing.length));
+      const updates = existing.map((row, idx) => ({
+        assignmentId: row.id,
+        areaId: targetAreaId,
+        floorId: dropFloorId,
+        order: idx >= boundedIndex ? idx + 1 : idx
+      }));
+      if (updates.length) {
+        const orderMap = new Map(updates.map((u) => [u.assignmentId, u.order]));
+        currentAssignments = currentAssignments.map((row) =>
+          orderMap.has(row.id) ? { ...row, order: orderMap.get(row.id) } : row
+        );
+        renderAssignments();
+      }
+      console.info("[Floor] creating assignment", {
+        workerId,
+        areaId,
+        floorId: dropFloorId,
+        timeNoteLeft: "",
+        timeNoteRight: ""
+      });
+      try {
+        await persistOrders(updates);
+        await createAssignment({
+          userId: currentSite.userId,
+          siteId: currentSite.siteId,
+          floorId: dropFloorId,
+          areaId: targetAreaId,
+          workerId,
+          order: boundedIndex
+        });
+      } catch (err) {
+        handleActionError("配置の登録に失敗しました", err);
+      }
+    } else if (type === "placed") {
+      const assignmentId = e.dataTransfer.getData("assignmentId");
+      const state = dragStates.get(assignmentId);
+      if (state) state.handled = true;
+      const workerId = e.dataTransfer.getData("workerId");
+      const from = normalizeAreaId(e.dataTransfer.getData("fromAreaId"));
+      const fromFloor = e.dataTransfer.getData("fromFloorId") || "";
+      const sourceKey = areaKey(from, fromFloor);
+      const targetKey = areaKey(targetAreaId, dropFloorId);
+      const assignmentsByArea = groupAssignments();
+      const movingRow = currentAssignments.find((row) => row.id === assignmentId);
+      const originalTarget = sortAssignments(assignmentsByArea.get(targetKey) || []);
+      const sourceList = sortAssignments(assignmentsByArea.get(sourceKey) || []).filter(
+        (row) => row.id !== assignmentId
+      );
+      const targetList = sortAssignments(assignmentsByArea.get(targetKey) || []).filter(
+        (row) => row.id !== assignmentId
+      );
+      const boundedIndex = Math.max(0, Math.min(insertIndex, targetList.length));
+      const movingEntry = movingRow
+        ? {
+            ...movingRow,
+            areaId: targetAreaId,
+            floorId: dropFloorId,
+            updatedAt: Date.now()
+          }
+        : {
+            id: assignmentId,
+            workerId,
+            areaId: targetAreaId,
+            floorId: dropFloorId,
+            updatedAt: Date.now()
+          };
+      targetList.splice(boundedIndex, 0, movingEntry);
+
+      const updates = [];
+      if (targetKey === sourceKey) {
+        const unchanged =
+          originalTarget.length === targetList.length &&
+          originalTarget.every((row, idx) => row.id === targetList[idx].id);
+        if (unchanged) return;
+      }
+      targetList.forEach((row, idx) => {
+        updates.push({
+          assignmentId: row.id,
+          areaId: row.areaId || targetAreaId,
+          floorId: row.floorId || dropFloorId,
+          order: idx
+        });
+      });
+      if (targetKey !== sourceKey) {
+        sourceList.forEach((row, idx) => {
           updates.push({
             assignmentId: row.id,
-            areaId: row.areaId || targetAreaId,
-            floorId: row.floorId || dropFloorId,
+            areaId: row.areaId || from,
+            floorId: row.floorId || fromFloor,
             order: idx
           });
         });
-        if (targetKey !== sourceKey) {
-          sourceList.forEach((row, idx) => {
-            updates.push({
-              assignmentId: row.id,
-              areaId: row.areaId || from,
-              floorId: row.floorId || fromFloor,
-              order: idx
-            });
-          });
-        }
+      }
 
-        if (updates.length === 0) return;
+      if (updates.length === 0) return;
 
-        const nextMap = new Map(assignmentsByArea);
-        nextMap.set(sourceKey, sourceList);
-        nextMap.set(targetKey, targetList);
-        const merged = [];
-        nextMap.forEach((list = []) => merged.push(...list));
-        currentAssignments = merged;
-        renderAssignments();
+      const nextMap = new Map(assignmentsByArea);
+      nextMap.set(sourceKey, sourceList);
+      nextMap.set(targetKey, targetList);
+      const merged = [];
+      nextMap.forEach((list = []) => merged.push(...list));
+      currentAssignments = merged;
+      renderAssignments();
 
-        console.info("[Floor] updating assignment area and order", {
-          assignmentId,
+      console.info("[Floor] updating assignment area and order", {
+        assignmentId,
+        workerId,
+        from,
+        fromFloor,
+        toFloor: dropFloorId,
+        to: targetAreaId,
+        updates
+      });
+      await persistOrders(updates, "配置エリアの更新に失敗しました");
+      const mentorship = getMentorship(workerId);
+      const normalizedFrom = normalizeAreaId(from);
+      const normalizedTarget = normalizeAreaId(targetAreaId);
+      const isSameSpot =
+        normalizedFrom === normalizedTarget && (fromFloor || "") === (dropFloorId || "");
+      const shouldDetachMentorship = mentorship.mentorId && !isSameSpot;
+      if (shouldDetachMentorship) {
+        await requestMentorshipChange({
           workerId,
-          from,
-          fromFloor,
-          toFloor: dropFloorId,
-          to: targetAreaId,
-          updates
+          mentorId: "",
+          areaId: targetAreaId,
+          floorId: dropFloorId,
+          groupOrder: 0
         });
-        await persistOrders(updates, "配置エリアの更新に失敗しました");
-        const mentorship = getMentorship(workerId);
-        const normalizedFrom = normalizeAreaId(from);
-        const normalizedTarget = normalizeAreaId(targetAreaId);
-        const isSameSpot =
-          normalizedFrom === normalizedTarget && (fromFloor || "") === (dropFloorId || "");
-        const shouldDetachMentorship = mentorship.mentorId && !isSameSpot;
-        if (shouldDetachMentorship) {
-          await requestMentorshipChange({
-            workerId,
-            mentorId: "",
-            areaId: targetAreaId,
-            floorId: dropFloorId,
-            groupOrder: 0
-          });
-        }
-        let groupOrderUpdates = buildGroupOrderUpdates(
-          targetList,
-          targetAreaId,
-          dropFloorId
+      }
+      let groupOrderUpdates = buildGroupOrderUpdates(
+        targetList,
+        targetAreaId,
+        dropFloorId
+      );
+      if (targetKey !== sourceKey) {
+        groupOrderUpdates.push(...buildGroupOrderUpdates(sourceList, from, fromFloor));
+      }
+      if (shouldDetachMentorship) {
+        groupOrderUpdates = groupOrderUpdates.filter(
+          (update) => update.workerId !== workerId
         );
-        if (targetKey !== sourceKey) {
-          groupOrderUpdates.push(
-            ...buildGroupOrderUpdates(sourceList, from, fromFloor)
-          );
-        }
-        if (shouldDetachMentorship) {
-          groupOrderUpdates = groupOrderUpdates.filter(
-            (update) => update.workerId !== workerId
-          );
-        }
-        if (groupOrderUpdates.length) {
-          await applyMentorshipUpdates(groupOrderUpdates);
-        }
+      }
+      if (groupOrderUpdates.length) {
+        await applyMentorshipUpdates(groupOrderUpdates);
+      }
+    }
+  }
+
+  function setupDropzone(zone) {
+    if (!zone || zone.dataset.bound === "true") return;
+    zone.dataset.bound = "true";
+    zone.addEventListener("dragover", (e) => {
+      if (_readOnly) return;
+      const context = resolveDropContext(e);
+      if (!context) return;
+      e.preventDefault();
+      context.zone?.classList.add("dragover");
+      const insertIndex = findInsertIndex(context.drop, e.clientY);
+      showPlaceholder(context.drop, insertIndex);
+    });
+    zone.addEventListener("dragleave", (e) => {
+      if (!zone.contains(e.relatedTarget)) {
+        removePlaceholder(zone.querySelector(".droparea"));
+        zone.classList.remove("dragover");
+      }
+    });
+    zone.addEventListener("drop", async (e) => {
+      const context = resolveDropContext(e);
+      if (!context) return;
+      try {
+        await handleAreaDrop(e, context.drop);
+      } finally {
+        cleanupDragState();
+      }
+    });
+  }
+
+  function setupPoolDropzone(poolEl) {
+    if (!poolEl || poolEl.dataset.bound === "true") return;
+    poolEl.dataset.bound = "true";
+    poolEl.addEventListener("dragover", (e) => {
+      if (_readOnly) return;
+      const type = e.dataTransfer?.getData("type");
+      if (type !== "placed") return;
+      e.preventDefault();
+      poolEl.classList.add("dragover");
+    });
+    poolEl.addEventListener("dragleave", (e) => {
+      if (!poolEl.contains(e.relatedTarget)) {
+        poolEl.classList.remove("dragover");
+      }
+    });
+    poolEl.addEventListener("drop", async (e) => {
+      poolEl.classList.remove("dragover");
+      if (_readOnly) {
+        e.preventDefault();
+        cleanupDragState();
+        return;
+      }
+      e.preventDefault();
+      const type = e.dataTransfer.getData("type");
+      if (type !== "placed") {
+        cleanupDragState();
+        return;
+      }
+      const assignmentId = e.dataTransfer.getData("assignmentId");
+      const state = dragStates.get(assignmentId);
+      if (state) state.handled = true;
+      if (!currentSite?.userId || !currentSite?.siteId) {
+        notifyMissingContext();
+        cleanupDragState();
+        return;
+      }
+      if (!assignmentId) {
+        cleanupDragState();
+        return;
+      }
+      currentAssignments = currentAssignments.filter((row) => row.id !== assignmentId);
+      renderAssignments();
+      try {
+        console.info("[Floor] closing assignment via pool drop", { assignmentId });
+        await closeAssignment({
+          userId: currentSite.userId,
+          siteId: currentSite.siteId,
+          assignmentId
+        });
+      } catch (err) {
+        handleActionError("在籍のOUT処理に失敗しました", err);
+      } finally {
+        cleanupDragState();
       }
     });
   }
 
   function bindDropzones() {
-    zonesEl.querySelectorAll(".droparea").forEach((drop) => {
-      setupDropzone(drop);
+    zonesEl.querySelectorAll(".zone").forEach((zone) => {
+      setupDropzone(zone);
     });
   }
 
@@ -1153,6 +1229,11 @@ export function makeFloor(
     renderAssignments();
   }
 
+  function setPoolDropzone(el) {
+    poolDropEl = el;
+    setupPoolDropzone(poolDropEl);
+  }
+
   function renderZones() {
     zonesEl.innerHTML = "";
     fallbackZoneEls = new Map();
@@ -1190,7 +1271,7 @@ export function makeFloor(
       if (drop) {
         applyDropLayout(drop, { floorId });
         drop.innerHTML = "";
-        setupDropzone(drop);
+        setupDropzone(zone);
         return drop;
       }
     }
@@ -1213,7 +1294,7 @@ export function makeFloor(
     zone.appendChild(drop);
     zonesEl.appendChild(zone);
     fallbackZoneEls.set(key, zone);
-    setupDropzone(drop);
+    setupDropzone(zone);
     return drop;
   }
 
@@ -1343,7 +1424,8 @@ export function makeFloor(
     setReadOnly,
     setSite,
     setSkillSettings,
-    setFallbackVisibility
+    setFallbackVisibility,
+    setPoolDropzone
   };
   window.__floorRender = api;
 

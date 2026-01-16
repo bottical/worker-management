@@ -2,7 +2,6 @@
 import {
   createAssignment,
   updateAssignmentsOrder,
-  updateAssignmentArea,
   DEFAULT_AREAS,
   DEFAULT_SKILL_SETTINGS
 } from "../api/firebase.js";
@@ -142,7 +141,7 @@ export function makeFloor(
       zone.classList.remove("dragover");
     });
     clearActivePlaceholder();
-    document.removeEventListener("dragover", handleDocumentDragover);
+    document.removeEventListener("dragover", handleDocumentDragover, { capture: true });
   }
 
   const handleGlobalDragCleanup = () => {
@@ -156,6 +155,12 @@ export function makeFloor(
     e.preventDefault();
     if (e.dataTransfer) {
       e.dataTransfer.dropEffect = "move";
+    }
+  };
+
+  const handleDocumentKeydown = (e) => {
+    if (e.key === "Escape") {
+      handleGlobalDragCleanup();
     }
   };
 
@@ -655,7 +660,7 @@ export function makeFloor(
         dataTransfer.setData("fromFloorId", card.dataset.floorId || "");
         dataTransfer.setData("text/plain", "placed");
       }
-      document.addEventListener("dragover", handleDocumentDragover);
+      document.addEventListener("dragover", handleDocumentDragover, { capture: true });
     });
     card.addEventListener("dragend", async (e) => {
       card.classList.remove("dragging");
@@ -870,6 +875,8 @@ export function makeFloor(
     const type = e.dataTransfer?.getData("type");
     if (type !== "placed") return;
     const assignmentId = e.dataTransfer.getData("assignmentId");
+    const fromAreaId = e.dataTransfer.getData("fromAreaId");
+    const fromFloorId = e.dataTransfer.getData("fromFloorId");
     if (!assignmentId) return;
     const state = dragStates.get(assignmentId);
     if (state) state.handled = true;
@@ -878,26 +885,54 @@ export function makeFloor(
       return;
     }
     const movingRow = currentAssignments.find((row) => row.id === assignmentId);
-    if (!movingRow || !movingRow.areaId) return;
+    if (!movingRow) return;
+    if (movingRow.areaId === "" || movingRow.areaId === null || movingRow.areaId === undefined) {
+      return;
+    }
 
-    const fromArea = normalizeAreaId(movingRow.areaId);
-    const fromFloor = movingRow.floorId || "";
+    const fromArea = normalizeAreaId(fromAreaId || movingRow.areaId);
+    const fromFloor = fromFloorId || movingRow.floorId || "";
+    const poolFloorId = fromFloor || currentSite.floorId || "";
     const sourceKey = areaKey(fromArea, fromFloor);
     const assignmentsByArea = groupAssignments();
     const sourceList = sortAssignments(assignmentsByArea.get(sourceKey) || []).filter(
       (row) => row.id !== assignmentId
     );
 
-    const updates = sourceList.map((row, idx) => ({
-      assignmentId: row.id,
-      areaId: row.areaId || fromArea,
-      floorId: row.floorId || fromFloor,
-      order: idx
-    }));
+    const unplacedList = currentAssignments.filter(
+      (row) =>
+        !row.areaId &&
+        (row.floorId || currentSite.floorId || "") === poolFloorId &&
+        row.id !== assignmentId
+    );
+    const maxUnplacedOrder = unplacedList.length
+      ? Math.max(...unplacedList.map((row) => row.order ?? 0))
+      : -1;
+    const unplacedOrder = maxUnplacedOrder + 1;
+
+    const updates = sourceList
+      .map((row, idx) => ({
+        assignmentId: row.id,
+        areaId: row.areaId || fromArea,
+        floorId: row.floorId || fromFloor,
+        order: idx
+      }))
+      .concat({
+        assignmentId,
+        areaId: "",
+        floorId: poolFloorId,
+        order: unplacedOrder
+      });
 
     currentAssignments = currentAssignments.map((row) =>
       row.id === assignmentId
-        ? { ...row, areaId: null, updatedAt: Date.now() }
+        ? {
+            ...row,
+            areaId: "",
+            floorId: poolFloorId,
+            order: unplacedOrder,
+            updatedAt: Date.now()
+          }
         : row
     );
     renderAssignments();
@@ -905,23 +940,18 @@ export function makeFloor(
     console.info("[Floor] unplacing assignment", {
       assignmentId,
       fromArea,
-      fromFloor
+      fromFloor,
+      poolFloorId,
+      unplacedOrder
     });
     await persistOrders(updates, "配置の更新に失敗しました");
-    await updateAssignmentArea({
-      userId: currentSite.userId,
-      siteId: currentSite.siteId,
-      assignmentId,
-      areaId: null,
-      floorId: fromFloor
-    });
     const mentorship = getMentorship(movingRow.workerId);
     if (mentorship.mentorId) {
       await requestMentorshipChange({
         workerId: movingRow.workerId,
         mentorId: "",
         areaId: "",
-        floorId: fromFloor,
+        floorId: poolFloorId,
         groupOrder: 0
       });
     }
@@ -1573,7 +1603,8 @@ export function makeFloor(
   window.addEventListener("mouseup", handleGlobalDragCleanup);
   window.addEventListener("dragend", handleGlobalDragCleanup, true);
   window.addEventListener("drop", handleGlobalDragCleanup, true);
-  document.addEventListener("dragover", handleDocumentDragover);
+  window.addEventListener("blur", handleGlobalDragCleanup);
+  document.addEventListener("keydown", handleDocumentKeydown);
   document.addEventListener("visibilitychange", handleGlobalDragCleanup);
 
   // アンマウント
@@ -1581,7 +1612,9 @@ export function makeFloor(
     window.removeEventListener("mouseup", handleGlobalDragCleanup);
     window.removeEventListener("dragend", handleGlobalDragCleanup, true);
     window.removeEventListener("drop", handleGlobalDragCleanup, true);
-    document.removeEventListener("dragover", handleDocumentDragover);
+    window.removeEventListener("blur", handleGlobalDragCleanup);
+    document.removeEventListener("keydown", handleDocumentKeydown);
+    document.removeEventListener("dragover", handleDocumentDragover, { capture: true });
     document.removeEventListener("visibilitychange", handleGlobalDragCleanup);
     if (window.__floorRender) delete window.__floorRender;
     mount.innerHTML = "";

@@ -142,10 +142,21 @@ export function makeFloor(
       zone.classList.remove("dragover");
     });
     clearActivePlaceholder();
+    document.removeEventListener("dragover", handleDocumentDragover);
   }
 
   const handleGlobalDragCleanup = () => {
     cleanupDragState();
+  };
+
+  const handleDocumentDragover = (e) => {
+    if (_readOnly) return;
+    const type = e.dataTransfer?.getData("type");
+    if (type !== "placed") return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "move";
+    }
   };
 
   function showPlaceholder(dropEl, index) {
@@ -610,6 +621,9 @@ export function makeFloor(
       timeNotes
     );
     if (!card) return;
+    if (meta.inPool) {
+      card.classList.add("in-pool");
+    }
     card.dataset.order = String(order);
     const settingsBtn = card.querySelector('[data-action="edit-worker"]');
     if (settingsBtn) {
@@ -641,6 +655,7 @@ export function makeFloor(
         dataTransfer.setData("fromFloorId", card.dataset.floorId || "");
         dataTransfer.setData("text/plain", "placed");
       }
+      document.addEventListener("dragover", handleDocumentDragover);
     });
     card.addEventListener("dragend", async (e) => {
       card.classList.remove("dragging");
@@ -949,6 +964,9 @@ export function makeFloor(
       const type = e.dataTransfer?.getData("type");
       if (type !== "placed") return;
       e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "move";
+      }
       poolEl.classList.add("dragover");
     });
     poolEl.addEventListener("dragleave", (e) => {
@@ -972,6 +990,7 @@ export function makeFloor(
     zonesEl.querySelectorAll(".zone").forEach((zone) => {
       setupDropzone(zone);
     });
+    setupPoolDropzone(poolDropEl);
   }
 
   // 外部（Dashboard）から呼ばれる：在籍スナップショットの反映
@@ -1071,15 +1090,24 @@ export function makeFloor(
       if (drop) drop.innerHTML = "";
     });
     const activeFallbackFloors = new Set();
-    const normalizedAssignments = (currentAssignments || [])
+    const assignments = currentAssignments || [];
+    const fallbackFloorId = currentSite.floorId || _areas[0]?.floorId || "";
+    const placedAssignments = assignments
       .filter((r) => r.areaId)
       .map((r) => ({
         ...r,
         areaId: normalizeAreaId(r.areaId),
-        floorId: r.floorId || currentSite.floorId || _areas[0]?.floorId || ""
+        floorId: r.floorId || fallbackFloorId
+      }));
+    const unplacedAssignments = assignments
+      .filter((r) => !r.areaId)
+      .map((r) => ({
+        ...r,
+        areaId: "",
+        floorId: r.floorId || fallbackFloorId
       }));
 
-    const grouped = groupAssignments(normalizedAssignments);
+    const grouped = groupAssignments(placedAssignments);
     grouped.forEach((list = []) => {
       const sorted = sortAssignments(list);
       if (!sorted.length) return;
@@ -1132,7 +1160,24 @@ export function makeFloor(
     } else {
       cleanupFallbackZones(new Set());
     }
+    renderPool(unplacedAssignments);
     renderMentorshipLines();
+  }
+
+  function renderPool(unplaced = []) {
+    if (!poolDropEl) return;
+    poolDropEl.innerHTML = "";
+    const sorted = sortAssignments(unplaced);
+    sorted.forEach((row, idx) => {
+      const order = typeof row.order === "number" ? row.order : idx;
+      addSlot(poolDropEl, row.workerId, "", row.id, row.floorId, order, {
+        role: "solo",
+        inPool: true
+      }, {
+        timeNoteLeft: row.timeNoteLeft,
+        timeNoteRight: row.timeNoteRight
+      });
+    });
   }
 
   function clearMentorshipLines() {
@@ -1528,6 +1573,7 @@ export function makeFloor(
   window.addEventListener("mouseup", handleGlobalDragCleanup);
   window.addEventListener("dragend", handleGlobalDragCleanup, true);
   window.addEventListener("drop", handleGlobalDragCleanup, true);
+  document.addEventListener("dragover", handleDocumentDragover);
   document.addEventListener("visibilitychange", handleGlobalDragCleanup);
 
   // アンマウント
@@ -1535,6 +1581,7 @@ export function makeFloor(
     window.removeEventListener("mouseup", handleGlobalDragCleanup);
     window.removeEventListener("dragend", handleGlobalDragCleanup, true);
     window.removeEventListener("drop", handleGlobalDragCleanup, true);
+    document.removeEventListener("dragover", handleDocumentDragover);
     document.removeEventListener("visibilitychange", handleGlobalDragCleanup);
     if (window.__floorRender) delete window.__floorRender;
     mount.innerHTML = "";

@@ -7,6 +7,7 @@ import {
   createAssignment,
   getActiveAssignments,
   saveDailyRoster,
+  getDailyRoster,
   getFloorsOnce,
   getAreasOnce
 } from "../api/firebase.js";
@@ -349,6 +350,65 @@ export function renderImport(mount) {
         (r, idx) => r.areaId && missingIndexSet.has(idx)
       );
 
+      const aliasMap = new Map();
+      const aliasDuplicates = new Set();
+      for (const row of rows) {
+        const aliasCode = String(row.aliasCode || "").trim();
+        if (!aliasCode) continue;
+        if (aliasMap.has(aliasCode)) {
+          aliasDuplicates.add(aliasCode);
+          continue;
+        }
+        aliasMap.set(aliasCode, row.workerId);
+      }
+
+      if (aliasDuplicates.size) {
+        const list = Array.from(aliasDuplicates);
+        const message = `区別コードが重複しています：${list.join(", ")}`;
+        console.warn("[Import] duplicate alias codes detected", list);
+        toast(message, "error");
+        result.textContent = message;
+        setLoading(false);
+        console.groupEnd();
+        return;
+      }
+
+      if (aliasMap.size) {
+        const floorCandidates = new Set(knownFloors.map((id) => id).filter(Boolean));
+        if (defaultFloorId) {
+          floorCandidates.add(defaultFloorId);
+        }
+        if (!floorCandidates.size) {
+          floorCandidates.add("");
+        }
+        const conflicts = [];
+        for (const floorId of floorCandidates) {
+          const roster = await getDailyRoster({
+            userId: state.site.userId,
+            siteId: state.site.siteId,
+            floorId,
+            date: dateStr
+          });
+          const existingAliases = roster?.aliases || {};
+          for (const [aliasCode, workerId] of Object.entries(existingAliases)) {
+            const incomingWorkerId = aliasMap.get(aliasCode);
+            if (incomingWorkerId && incomingWorkerId !== workerId) {
+              conflicts.push(aliasCode);
+            }
+          }
+        }
+        if (conflicts.length) {
+          const uniqueConflicts = Array.from(new Set(conflicts));
+          const message = `既存の区別コードが別IDに紐付いています：${uniqueConflicts.join(", ")}`;
+          console.warn("[Import] alias conflicts with existing roster", uniqueConflicts);
+          toast(message, "error");
+          result.textContent = message;
+          setLoading(false);
+          console.groupEnd();
+          return;
+        }
+      }
+
       // 既存作業者の取得（重複IDはマスタ更新しない）
       const existingWorkers = await getWorkersOnce({
         userId: state.site.userId,
@@ -439,13 +499,21 @@ export function renderImport(mount) {
       }
 
       for (const [floorId, list] of rosterGroups.entries()) {
+        const aliases = {};
+        for (const row of list) {
+          const aliasCode = String(row.aliasCode || "").trim();
+          if (aliasCode) {
+            aliases[aliasCode] = row.workerId;
+          }
+        }
         try {
           await saveDailyRoster({
             userId: state.site.userId,
             siteId: state.site.siteId,
             floorId,
             date: dateStr,
-            workers: list
+            workers: list,
+            aliases
           });
         } catch (err) {
           console.error("[Import] saveDailyRoster failed", { floorId, err });

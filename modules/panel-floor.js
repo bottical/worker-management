@@ -150,8 +150,8 @@ export function makeFloor(
 
   const handleDocumentDragover = (e) => {
     if (_readOnly) return;
-    const type = e.dataTransfer?.getData("type");
-    if (type !== "placed") return;
+    const types = e.dataTransfer?.types;
+    if (!types || !Array.from(types).includes("type")) return;
     e.preventDefault();
     if (e.dataTransfer) {
       e.dataTransfer.dropEffect = "move";
@@ -1022,8 +1022,8 @@ export function makeFloor(
     poolEl.dataset.bound = "true";
     poolEl.addEventListener("dragover", (e) => {
       if (_readOnly) return;
-      const type = e.dataTransfer?.getData("type");
-      if (type !== "placed") return;
+      const types = e.dataTransfer?.types;
+      if (!types || !Array.from(types).includes("type")) return;
       e.preventDefault();
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = "move";

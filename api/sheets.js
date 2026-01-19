@@ -5,9 +5,10 @@
  * 1列目: 作業者ID
  * 2列目: 氏名
  * 3列目: 基本エリアID（任意）
+ * 4列目: 区別コード（任意）
  * を読み込む。
  *
- * 返却: { ids: string[], rows: [{workerId,name,areaId?}] , duplicates: string[] }
+ * 返却: { ids: string[], rows: [{workerId,name,areaId?,aliasCode?}] , duplicates: string[] }
  */
 
 function nextCol(col) {
@@ -294,6 +295,7 @@ export async function readWorkerRows(
   const idColumn = (idCol || "A").toUpperCase();
   const nameCol = nextCol(idColumn);
   const areaCol = nextCol(nameCol);
+  const aliasCol = nextCol(areaCol);
 
   let values;
   try {
@@ -301,7 +303,7 @@ export async function readWorkerRows(
       sheetId,
       sheetTitle: dateStr,
       startCell: `${idColumn}${startRow}`,
-      endCell: `${areaCol}9999`,
+      endCell: `${aliasCol}9999`,
       feature: "readWorkerRows"
     });
   } catch (err) {
@@ -317,18 +319,20 @@ export async function readWorkerRows(
     startRow,
     idColumn,
     nameCol,
-    areaCol
+    areaCol,
+    aliasCol
   });
 
   const rowsOut = [];
   for (const row of values) {
     if (!Array.isArray(row)) continue;
-    const [workerIdRaw = "", nameRaw = "", areaRaw = ""] = row;
+    const [workerIdRaw = "", nameRaw = "", areaRaw = "", aliasRaw = ""] = row;
     const workerId = String(workerIdRaw || "").trim();
     const name = String(nameRaw || "").trim();
     const areaId = String(areaRaw || "").trim();
+    const aliasCode = String(aliasRaw || "").trim();
     if (!workerId) continue;
-    rowsOut.push({ workerId, name, areaId });
+    rowsOut.push({ workerId, name, areaId, aliasCode });
   }
 
   // 重複除去

@@ -755,7 +755,14 @@ export async function saveFloors({ userId, siteId, floors, siteLabel }) {
  * dailyRosters（日次シートの作業者）API
  * ========================= */
 
-export async function saveDailyRoster({ userId, siteId, floorId, date, workers }) {
+export async function saveDailyRoster({
+  userId,
+  siteId,
+  floorId,
+  date,
+  workers,
+  aliases
+}) {
   assertUserSite({ userId, siteId });
   const sanitized = (workers || []).map((w) => ({
     workerId: w.workerId,
@@ -764,6 +771,15 @@ export async function saveDailyRoster({ userId, siteId, floorId, date, workers }
     mentorId: w.mentorId || "",
     groupOrder: typeof w.groupOrder === "number" ? w.groupOrder : 0
   }));
+  const sanitizedAliases = {};
+  if (aliases && typeof aliases === "object") {
+    for (const [aliasCode, workerId] of Object.entries(aliases)) {
+      const code = String(aliasCode || "").trim();
+      const mapped = String(workerId || "").trim();
+      if (!code || !mapped) continue;
+      sanitizedAliases[code] = mapped;
+    }
+  }
   await ensureSiteMetadata(userId, siteId);
   const ref = siteDocument(userId, siteId, "dailyRosters", rosterDocId(siteId, floorId || "", date));
   await setDoc(
@@ -773,6 +789,7 @@ export async function saveDailyRoster({ userId, siteId, floorId, date, workers }
       floorId: floorId || "",
       date,
       workers: sanitized,
+      aliases: sanitizedAliases,
       updatedAt: serverTimestamp()
     },
     { merge: true }
@@ -782,11 +799,11 @@ export async function saveDailyRoster({ userId, siteId, floorId, date, workers }
 
 export async function getDailyRoster({ userId, siteId, floorId, date }) {
   assertUserSite({ userId, siteId });
-  if (!date) return { workers: [] };
+  if (!date) return { workers: [], aliases: {} };
   const ref = siteDocument(userId, siteId, "dailyRosters", rosterDocId(siteId, floorId || "", date));
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    return { workers: [] };
+    return { workers: [], aliases: {} };
   }
   const data = snap.data() || {};
   const workers = Array.isArray(data.workers)
@@ -798,7 +815,33 @@ export async function getDailyRoster({ userId, siteId, floorId, date }) {
         groupOrder: typeof w.groupOrder === "number" ? w.groupOrder : 0
       }))
     : [];
-  return { workers };
+  const aliases = data.aliases && typeof data.aliases === "object" ? data.aliases : {};
+  return { workers, aliases };
+}
+
+export async function resolveWorkerId({ userId, siteId, date, code }) {
+  assertUserSite({ userId, siteId });
+  const normalized = String(code || "").trim();
+  if (!normalized) return null;
+  const workerRef = siteDocument(userId, siteId, "workers", normalized);
+  const workerSnap = await getDoc(workerRef);
+  if (workerSnap.exists()) {
+    return normalized;
+  }
+  if (!date) return null;
+  const floors = await getFloorsOnce({ userId, siteId });
+  const floorIds = new Set(floors.map((f) => f?.id).filter(Boolean));
+  if (!floorIds.size) {
+    floorIds.add("");
+  }
+  for (const floorId of floorIds) {
+    const { aliases } = await getDailyRoster({ userId, siteId, floorId, date });
+    const resolved = aliases?.[normalized];
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return null;
 }
 
 /* =========================
@@ -810,6 +853,18 @@ export async function getWorkersOnce({ userId, siteId }) {
   const col = siteCollection(userId, siteId, "workers");
   const snap = await getDocs(col);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+export async function getWorkerById({ userId, siteId, workerId }) {
+  assertUserSite({ userId, siteId });
+  const normalized = String(workerId || "").trim();
+  if (!normalized) return null;
+  const ref = siteDocument(userId, siteId, "workers", normalized);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    return null;
+  }
+  return { id: snap.id, ...snap.data() };
 }
 
 export function subscribeWorkers({ userId, siteId }, cb) {

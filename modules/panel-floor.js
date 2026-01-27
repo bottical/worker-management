@@ -1401,6 +1401,21 @@ export function makeFloor(
     fallbackZoneEls = new Map();
     applyGridTemplate();
     _areas.forEach((area) => {
+      const countingEnabled = area?.counting?.enabled === true;
+      const skillMap = new Map(
+        (_skillSettings?.skills || DEFAULT_SKILL_SETTINGS.skills)
+          .map((skill) => ({
+            id: String(skill?.id || "").trim(),
+            name: skill?.name || skill?.id
+          }))
+          .filter((skill) => skill.id)
+          .map((skill) => [skill.id, skill.name])
+      );
+      const skillNames = countingEnabled
+        ? (area.counting?.skillIds || [])
+            .map((id) => skillMap.get(String(id)) || String(id))
+            .filter(Boolean)
+        : [];
       const zone = document.createElement("div");
       zone.className = "zone";
       zone.dataset.floorId = area.floorId || "";
@@ -1417,6 +1432,12 @@ export function makeFloor(
       drop.dataset.floorId = area.floorId || "";
       applyDropLayout(drop, area);
       zone.appendChild(title);
+      if (countingEnabled) {
+        const skills = document.createElement("div");
+        skills.className = "area-skills hint";
+        skills.textContent = `対象: ${skillNames.length ? skillNames.join(", ") : "-"}`;
+        zone.appendChild(skills);
+      }
       zone.appendChild(drop);
       zonesEl.appendChild(zone);
     });
@@ -1487,7 +1508,8 @@ export function makeFloor(
         rowSpan: toPositiveInt(a.rowSpan || a.gridRowSpan),
         colSpan: toPositiveInt(a.colSpan || a.gridColSpan),
         columns: toPositiveInt(a.columns),
-        minWidth: toPositiveInt(a.minWidth)
+        minWidth: toPositiveInt(a.minWidth),
+        counting: a.counting
       }))
       .filter((a) => a.id && a.id !== FALLBACK_AREA_ID)
       .sort((a, b) => {

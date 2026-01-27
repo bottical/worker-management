@@ -73,7 +73,7 @@ export function renderAreas(mount) {
       </form>
       <table class="table" style="margin-top:16px">
         <thead>
-          <tr><th>#</th><th>ID</th><th>表示名</th><th>列数</th><th>配置</th><th>操作</th></tr>
+          <tr><th>#</th><th>ID</th><th>表示名</th><th>列数</th><th>配置</th><th>対象スキル</th><th>操作</th></tr>
         </thead>
         <tbody id="areaRows"></tbody>
       </table>
@@ -316,11 +316,39 @@ export function renderAreas(mount) {
     return `${col} / ${row}${spanText}`;
   }
 
+  function getSkillNameMap() {
+    const skills = skillSettings?.skills?.length
+      ? skillSettings.skills
+      : DEFAULT_SKILL_SETTINGS.skills;
+    return new Map(
+      skills
+        .map((skill) => ({
+          id: String(skill?.id || "").trim(),
+          name: skill?.name || skill?.id
+        }))
+        .filter((skill) => skill.id)
+        .map((skill) => [skill.id, skill.name])
+    );
+  }
+
+  function getCountingSkillLabel(area) {
+    if (!area?.counting?.enabled) return "-";
+    const skillIds = Array.isArray(area.counting.skillIds)
+      ? area.counting.skillIds
+      : [];
+    if (!skillIds.length) return "-";
+    const map = getSkillNameMap();
+    const names = skillIds
+      .map((id) => map.get(String(id)) || String(id))
+      .filter(Boolean);
+    return names.length ? names.join(", ") : "-";
+  }
+
   function renderAreaRows() {
     areaRowsEl.innerHTML = "";
     if (!areas.length) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="6" class="hint">エリアが登録されていません。追加してください。</td>`;
+      tr.innerHTML = `<td colspan="7" class="hint">エリアが登録されていません。追加してください。</td>`;
       areaRowsEl.appendChild(tr);
       return;
     }
@@ -334,6 +362,7 @@ export function renderAreas(mount) {
         <td>${area.label}</td>
         <td class="mono">${area.columns || "自動"}</td>
         <td class="mono">${formatPlacement(area)}</td>
+        <td>${getCountingSkillLabel(area)}</td>
         <td class="row-actions">
           <button type="button" class="button ghost" data-edit="${area.id}">編集</button>
           <button type="button" class="button ghost" data-up="${area.id}" ${upDisabled}>↑</button>
@@ -423,7 +452,8 @@ export function renderAreas(mount) {
           gridColumn: a.gridColumn,
           gridRow: a.gridRow,
           colSpan: a.colSpan,
-          rowSpan: a.rowSpan
+          rowSpan: a.rowSpan,
+          counting: a.counting
         }))
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       const payloadForCache = {
@@ -484,7 +514,8 @@ export function renderAreas(mount) {
             gridColumn: a.gridColumn,
             gridRow: a.gridRow,
             colSpan: a.colSpan,
-            rowSpan: a.rowSpan
+            rowSpan: a.rowSpan,
+            counting: a.counting
           }))
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((a, idx) => ({ ...a, order: idx }));
@@ -747,6 +778,7 @@ export function renderAreas(mount) {
     (settings) => {
       skillSettings = settings || { ...DEFAULT_SKILL_SETTINGS };
       renderCountingSkillOptions(getSelectedSkillIds());
+      renderAreaRows();
     }
   );
 

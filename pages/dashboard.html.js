@@ -125,6 +125,8 @@ export function renderDashboard(mount) {
         defaultStartTime: "",
         defaultEndTime: "",
         employmentCount: 0,
+        lastWorkDate: "",
+        previousWorkDate: "",
         memo: "",
         panel: { color: "" },
         skillLevels: {}
@@ -140,6 +142,8 @@ export function renderDashboard(mount) {
       defaultStartTime: row.defaultStartTime || "",
       defaultEndTime: row.defaultEndTime || "",
       employmentCount: Number(row.employmentCount || 0),
+      lastWorkDate: row.lastWorkDate || "",
+      previousWorkDate: row.previousWorkDate || "",
       memo: row.memo || "",
       panel: { color: row.panel?.color || row.panelColor || "" },
       skillLevels,
@@ -186,6 +190,8 @@ export function renderDashboard(mount) {
         defaultEndTime: w.defaultEndTime || "",
         panelColor: w.panel?.color || "",
         employmentCount: Number(w.employmentCount || 0),
+        lastWorkDate: w.lastWorkDate || "",
+        previousWorkDate: w.previousWorkDate || "",
         memo: w.memo || "",
         skillLevels: normalizeSkillLevels(w.skillLevels),
         skillEmploymentCounts: normalizeSkillEmploymentCounts(w.skillEmploymentCounts)
@@ -342,6 +348,7 @@ export function renderDashboard(mount) {
     {
       onEditWorker: openWorkerEditor,
       skillSettings,
+      currentDate: selectedDate,
       onMentorshipChange: handleMentorshipChange
     }
   );
@@ -364,6 +371,8 @@ export function renderDashboard(mount) {
           defaultEndTime: "",
           panelColor: "",
           employmentCount: 0,
+          lastWorkDate: "",
+          previousWorkDate: "",
           memo: "",
           floorId: entry.floorId || "",
           skillLevels: normalizeSkillLevels(entry.skillLevels),
@@ -380,6 +389,8 @@ export function renderDashboard(mount) {
           defaultEndTime: "",
           panelColor: "",
           employmentCount: 0,
+          lastWorkDate: "",
+          previousWorkDate: "",
           memo: "",
           skillLevels: normalizeSkillLevels(row.skillLevels),
           skillEmploymentCounts: {}
@@ -400,6 +411,8 @@ export function renderDashboard(mount) {
           defaultStartTime: master.defaultStartTime,
           defaultEndTime: master.defaultEndTime,
           employmentCount: Number(master.employmentCount || 0),
+          lastWorkDate: master.lastWorkDate || "",
+          previousWorkDate: master.previousWorkDate || "",
           memo: master.memo || "",
           panel: { color: master.panel?.color || "" },
           skillLevels: normalizeSkillLevels(master.skillLevels),
@@ -414,6 +427,8 @@ export function renderDashboard(mount) {
         defaultStartTime: "",
         defaultEndTime: "",
         employmentCount: 0,
+        lastWorkDate: "",
+        previousWorkDate: "",
         memo: "",
         panel: { color: "" },
         skillLevels: {},
@@ -479,7 +494,8 @@ export function renderDashboard(mount) {
     drawPool(poolEl, notAssigned, {
       readOnly: isReadOnly,
       onEditWorker: openWorkerEditor,
-      skillSettings
+      skillSettings,
+      currentDate: selectedDate
     });
     countEl.textContent = String(notAssigned.length);
     updateViewMode();
@@ -508,6 +524,8 @@ export function renderDashboard(mount) {
             defaultEndTime: w.defaultEndTime,
             panelColor: w.panel?.color || "",
             employmentCount: Number(w.employmentCount || 0),
+            lastWorkDate: w.lastWorkDate || "",
+            previousWorkDate: w.previousWorkDate || "",
             memo: w.memo || "",
             skillLevels: normalizeSkillLevels(w.skillLevels),
             skillEmploymentCounts: normalizeSkillEmploymentCounts(
@@ -673,6 +691,7 @@ export function renderDashboard(mount) {
   async function loadAssignmentsForDate(dateStr) {
     selectedDate = dateStr || todayStr;
     set({ assignmentDate: selectedDate });
+    floorApi.setCurrentDate?.(selectedDate);
     if (dateInput && dateInput.value !== selectedDate) {
       dateInput.value = selectedDate;
     }

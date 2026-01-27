@@ -22,11 +22,14 @@ export function drawPool(container, workers = [], options = {}) {
   const {
     readOnly = false,
     onEditWorker,
-    skillSettings = DEFAULT_SKILL_SETTINGS
+    skillSettings = DEFAULT_SKILL_SETTINGS,
+    currentDate = ""
   } = options;
   container.innerHTML = "";
   workers.forEach((w) =>
-    container.appendChild(card(w, readOnly, onEditWorker, skillSettings))
+    container.appendChild(
+      card(w, readOnly, onEditWorker, skillSettings, currentDate)
+    )
   );
 }
 
@@ -41,7 +44,30 @@ function applyAccent(el, color) {
   }
 }
 
-function buildCardBody(worker) {
+function normalizeDateValue(value) {
+  if (!value) return "";
+  return String(value).trim();
+}
+
+function formatShortDate(value) {
+  const normalized = normalizeDateValue(value);
+  const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return normalized;
+  const [, year, month, day] = match;
+  return `${year.slice(-2)}/${month}/${day}`;
+}
+
+function resolveLastWorkDate(worker, currentDate) {
+  const lastWorkDate = normalizeDateValue(worker.lastWorkDate);
+  if (!lastWorkDate) return "";
+  const current = normalizeDateValue(currentDate);
+  if (current && lastWorkDate >= current) {
+    return normalizeDateValue(worker.previousWorkDate);
+  }
+  return lastWorkDate;
+}
+
+function buildCardBody(worker, currentDate) {
   const body = document.createElement("div");
   body.className = "card-body";
 
@@ -62,16 +88,18 @@ function buildCardBody(worker) {
   memo.className = "card-memo hint";
   memo.textContent = worker.memo ? `備考: ${worker.memo}` : "備考: -";
 
-  const employment = document.createElement("div");
-  employment.className = "employment-count";
-  employment.innerHTML = `<span class="count">${Number(
-    worker.employmentCount || 0
-  )}</span><span class="unit">回</span>`;
+  const lastWork = document.createElement("div");
+  lastWork.className = "employment-count";
+  const lastWorkDate = resolveLastWorkDate(worker, currentDate);
+  const formattedDate = formatShortDate(lastWorkDate);
+  lastWork.innerHTML = `<span class="label">最終作業日</span><span class="count">${
+    formattedDate || "-"
+  }</span>`;
 
   const metaRow = document.createElement("div");
   metaRow.className = "card-meta-row";
   metaRow.appendChild(memo);
-  metaRow.appendChild(employment);
+  metaRow.appendChild(lastWork);
 
   body.appendChild(header);
   body.appendChild(time);
@@ -80,7 +108,7 @@ function buildCardBody(worker) {
   return body;
 }
 
-function card(worker, readOnly, onEditWorker, skillSettings) {
+function card(worker, readOnly, onEditWorker, skillSettings, currentDate) {
   const el = document.createElement("div");
   el.className = "card pool-card";
   const panelColor = worker.panel?.color || worker.panelColor || "";
@@ -99,7 +127,7 @@ function card(worker, readOnly, onEditWorker, skillSettings) {
     normalizeSkillLevels(worker.skillLevels),
     normalizeSkillEmploymentCounts(worker.skillEmploymentCounts)
   );
-  const body = buildCardBody(worker);
+  const body = buildCardBody(worker, currentDate);
 
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";

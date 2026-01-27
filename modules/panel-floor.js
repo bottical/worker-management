@@ -37,6 +37,7 @@ export function makeFloor(
   let currentAssignments = [];
   let currentSite = { ...site };
   let _skillSettings = options.skillSettings || DEFAULT_SKILL_SETTINGS;
+  let _currentDate = typeof options.currentDate === "string" ? options.currentDate : "";
   let _showFallback = true;
   let fallbackZoneEls = new Map();
   const dragStates = new Map();
@@ -55,6 +56,29 @@ export function makeFloor(
     if (typeof ts === "number") return ts;
     if (typeof ts.seconds === "number") return ts.seconds * 1000;
     return 0;
+  }
+
+  function normalizeDateValue(value) {
+    if (!value) return "";
+    return String(value).trim();
+  }
+
+  function formatShortDate(value) {
+    const normalized = normalizeDateValue(value);
+    const match = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return normalized;
+    const [, year, month, day] = match;
+    return `${year.slice(-2)}/${month}/${day}`;
+  }
+
+  function resolveLastWorkDate(info) {
+    const lastWorkDate = normalizeDateValue(info.lastWorkDate);
+    if (!lastWorkDate) return "";
+    const current = normalizeDateValue(_currentDate);
+    if (current && lastWorkDate >= current) {
+      return normalizeDateValue(info.previousWorkDate);
+    }
+    return lastWorkDate;
   }
 
   function normalizeAreaId(areaId) {
@@ -428,16 +452,18 @@ export function makeFloor(
     memo.className = "card-memo hint";
     memo.textContent = info.memo ? `備考: ${info.memo}` : "備考: -";
 
-    const employment = document.createElement("div");
-    employment.className = "employment-count";
-    employment.innerHTML = `<span class="count">${Number(
-      info.employmentCount || 0
-    )}</span><span class="unit">回</span>`;
+    const lastWork = document.createElement("div");
+    lastWork.className = "employment-count";
+    const lastWorkDate = resolveLastWorkDate(info);
+    const formattedDate = formatShortDate(lastWorkDate);
+    lastWork.innerHTML = `<span class="label">最終作業日</span><span class="count">${
+      formattedDate || "-"
+    }</span>`;
 
     const metaRow = document.createElement("div");
     metaRow.className = "card-meta-row";
     metaRow.appendChild(memo);
-    metaRow.appendChild(employment);
+    metaRow.appendChild(lastWork);
 
     body.appendChild(header);
     body.appendChild(timeRow);
@@ -1386,6 +1412,11 @@ export function makeFloor(
     renderAssignments();
   }
 
+  function setCurrentDate(value = "") {
+    _currentDate = typeof value === "string" ? value.trim() : "";
+    renderAssignments();
+  }
+
   function setFallbackVisibility(flag = true) {
     _showFallback = Boolean(flag);
     renderAssignments();
@@ -1608,6 +1639,7 @@ export function makeFloor(
     setReadOnly,
     setSite,
     setSkillSettings,
+    setCurrentDate,
     setFallbackVisibility,
     setPoolDropzone
   };

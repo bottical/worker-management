@@ -15,16 +15,21 @@ import {
   upsertWorker,
   saveDailyRoster,
   updateAssignmentTimeNotes,
-  subscribeSkillSettings
+  subscribeSkillSettings,
+  recordSkillEmploymentCount
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
-import { normalizeSkillLevels } from "../modules/skill-layout.js";
+import {
+  normalizeSkillEmploymentCounts,
+  normalizeSkillLevels
+} from "../modules/skill-layout.js";
 
 const ALL_FLOOR_VALUE = "__all__";
 const DEFAULT_FONT_SCALE = 1;
 const FONT_SCALE_KEY = "dashboardFontScale";
 const FONT_SCALE_MIN = 0.5;
 const FONT_SCALE_MAX = 1.2;
+const SKILL_COUNT_INTERVAL_MS = 60000;
 
 export function renderDashboard(mount) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -128,6 +133,7 @@ export function renderDashboard(mount) {
     const workerId = row.workerId || "";
     if (!workerId) return null;
     const skillLevels = normalizeSkillLevels(row.skillLevels || row.skill_levels);
+    const skillEmploymentCounts = normalizeSkillEmploymentCounts(row.skillEmploymentCounts);
     return {
       workerId,
       name: row.name || workerId,
@@ -136,7 +142,8 @@ export function renderDashboard(mount) {
       employmentCount: Number(row.employmentCount || 0),
       memo: row.memo || "",
       panel: { color: row.panel?.color || row.panelColor || "" },
-      skillLevels
+      skillLevels,
+      skillEmploymentCounts
     };
   }
 
@@ -180,7 +187,8 @@ export function renderDashboard(mount) {
         panelColor: w.panel?.color || "",
         employmentCount: Number(w.employmentCount || 0),
         memo: w.memo || "",
-        skillLevels: normalizeSkillLevels(w.skillLevels)
+        skillLevels: normalizeSkillLevels(w.skillLevels),
+        skillEmploymentCounts: normalizeSkillEmploymentCounts(w.skillEmploymentCounts)
       }
     ])
   );
@@ -344,6 +352,7 @@ export function renderDashboard(mount) {
   let latestAssignmentsAll = [];
   let unsubAssign = () => {};
   let unsubFloors = () => {};
+  let skillCountTimer = null;
 
   function buildWorkerMap() {
     const map = new Map(masterWorkerMap);
@@ -357,7 +366,8 @@ export function renderDashboard(mount) {
           employmentCount: 0,
           memo: "",
           floorId: entry.floorId || "",
-          skillLevels: normalizeSkillLevels(entry.skillLevels)
+          skillLevels: normalizeSkillLevels(entry.skillLevels),
+          skillEmploymentCounts: {}
         });
       }
     });
@@ -371,7 +381,8 @@ export function renderDashboard(mount) {
           panelColor: "",
           employmentCount: 0,
           memo: "",
-          skillLevels: normalizeSkillLevels(row.skillLevels)
+          skillLevels: normalizeSkillLevels(row.skillLevels),
+          skillEmploymentCounts: {}
         });
       }
     });
@@ -391,7 +402,10 @@ export function renderDashboard(mount) {
           employmentCount: Number(master.employmentCount || 0),
           memo: master.memo || "",
           panel: { color: master.panel?.color || "" },
-          skillLevels: normalizeSkillLevels(master.skillLevels)
+          skillLevels: normalizeSkillLevels(master.skillLevels),
+          skillEmploymentCounts: normalizeSkillEmploymentCounts(
+            master.skillEmploymentCounts
+          )
         };
       }
       return {
@@ -402,7 +416,8 @@ export function renderDashboard(mount) {
         employmentCount: 0,
         memo: "",
         panel: { color: "" },
-        skillLevels: {}
+        skillLevels: {},
+        skillEmploymentCounts: {}
       };
     });
   }
@@ -494,7 +509,10 @@ export function renderDashboard(mount) {
             panelColor: w.panel?.color || "",
             employmentCount: Number(w.employmentCount || 0),
             memo: w.memo || "",
-            skillLevels: normalizeSkillLevels(w.skillLevels)
+            skillLevels: normalizeSkillLevels(w.skillLevels),
+            skillEmploymentCounts: normalizeSkillEmploymentCounts(
+              w.skillEmploymentCounts
+            )
           }
         ])
       );
@@ -543,6 +561,72 @@ export function renderDashboard(mount) {
       }
     });
     return Array.from(map.values()).map(({ _ts, ...rest }) => rest);
+  }
+
+  function normalizeAreaCounting(counting = {}) {
+    const enabled = counting?.enabled === true || counting?.enabled === "true";
+    const skillIds = Array.isArray(counting?.skillIds)
+      ? counting.skillIds.map((s) => String(s || "").trim()).filter(Boolean)
+      : [];
+    const thresholdMinutes = Number(counting?.thresholdMinutes || 0) || 120;
+    return { enabled, skillIds, thresholdMinutes };
+  }
+
+  async function runSkillEmploymentCountCheck() {
+    if (isReadOnly) return;
+    const dateKey = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    const areaLookup = new Map(
+      areaList.map((area) => [`${area.floorId || ""}__${area.id}`, area])
+    );
+    for (const assignment of latestAssignmentsAll) {
+      if (!assignment?.workerId || !assignment.areaId) continue;
+      const areaKey = `${assignment.floorId || ""}__${assignment.areaId}`;
+      const area = areaLookup.get(areaKey);
+      if (!area?.counting) continue;
+      const { enabled, skillIds, thresholdMinutes } = normalizeAreaCounting(
+        area.counting
+      );
+      if (!enabled || !skillIds.length) continue;
+      const enteredAt =
+        timestampToMillis(assignment.areaEnteredAt) ||
+        timestampToMillis(assignment.inAt);
+      if (!enteredAt) continue;
+      const continuousMinutes = Math.floor((now - enteredAt) / 60000);
+      if (continuousMinutes < thresholdMinutes) continue;
+      try {
+        await recordSkillEmploymentCount({
+          userId: state.site.userId,
+          siteId: state.site.siteId,
+          dateKey,
+          workerId: assignment.workerId,
+          floorId: assignment.floorId || "",
+          areaId: assignment.areaId || "",
+          skillIds,
+          thresholdMinutes,
+          continuousMinutes
+        });
+      } catch (err) {
+        console.warn("[Dashboard] skill count update failed", err);
+      }
+    }
+  }
+
+  function startSkillCountPolling() {
+    stopSkillCountPolling();
+    if (isReadOnly) return;
+    skillCountTimer = window.setInterval(
+      runSkillEmploymentCountCheck,
+      SKILL_COUNT_INTERVAL_MS
+    );
+    runSkillEmploymentCountCheck();
+  }
+
+  function stopSkillCountPolling() {
+    if (skillCountTimer) {
+      clearInterval(skillCountTimer);
+    }
+    skillCountTimer = null;
   }
 
   function startLiveSubscription(dateStr = selectedDate) {
@@ -597,10 +681,12 @@ export function renderDashboard(mount) {
       isReadOnly = false;
       updateViewMode();
       startLiveSubscription(selectedDate);
+      startSkillCountPolling();
     } else {
       isReadOnly = true;
       updateViewMode();
       stopLiveSubscription();
+      stopSkillCountPolling();
       await loadAssignmentsSnapshotForDate(selectedDate);
     }
     reconcile();
@@ -1114,6 +1200,7 @@ export function renderDashboard(mount) {
     "hashchange",
     () => {
       stopLiveSubscription();
+      stopSkillCountPolling();
       try {
         unsubWorkers();
       } catch (err) {

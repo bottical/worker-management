@@ -2,7 +2,11 @@
 import { fmtRange } from "../core/ui.js";
 import { getContrastTextColor } from "../core/colors.js";
 import { DEFAULT_SKILL_SETTINGS } from "../api/firebase.js";
-import { createSkillColumns, normalizeSkillLevels } from "./skill-layout.js";
+import {
+  createSkillColumns,
+  normalizeSkillEmploymentCounts,
+  normalizeSkillLevels
+} from "./skill-layout.js";
 
 export function makePool(mount, site) {
   // noop（現状siteは未使用だが将来用）
@@ -92,7 +96,8 @@ function card(worker, readOnly, onEditWorker, skillSettings) {
 
   const { left, right } = createSkillColumns(
     skillSettings,
-    normalizeSkillLevels(worker.skillLevels)
+    normalizeSkillLevels(worker.skillLevels),
+    normalizeSkillEmploymentCounts(worker.skillEmploymentCounts)
   );
   const body = buildCardBody(worker);
 

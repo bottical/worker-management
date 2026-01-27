@@ -17,7 +17,8 @@ import {
   getDoc,
   writeBatch,
   deleteField,
-  increment
+  increment,
+  runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
 import {
   getAuth,
@@ -105,6 +106,19 @@ function toPositiveInt(value) {
   return Number.isFinite(num) && num > 0 ? Math.floor(num) : null;
 }
 
+function normalizeAreaCounting(counting = {}) {
+  const enabled = counting?.enabled === true || counting?.enabled === "true";
+  const skillIds = Array.isArray(counting?.skillIds)
+    ? counting.skillIds.map((s) => String(s || "").trim()).filter(Boolean)
+    : [];
+  const thresholdMinutes = toPositiveInt(counting?.thresholdMinutes) ?? 120;
+  return {
+    enabled,
+    skillIds,
+    thresholdMinutes
+  };
+}
+
 function normalizedDefaultAreas() {
   const provided = (ENV.defaultSite?.areas || []).filter(Boolean);
   const merged = provided.length ? provided : DEFAULT_AREAS;
@@ -142,7 +156,8 @@ function sanitizeAreaConfig(area, idx) {
     rowSpan: toPositiveInt(area.rowSpan || area.gridRowSpan),
     colSpan: toPositiveInt(area.colSpan || area.gridColSpan),
     columns: columns ?? null,
-    minWidth: minWidth ?? null
+    minWidth: minWidth ?? null,
+    counting: normalizeAreaCounting(area.counting || {})
   };
 }
 
@@ -444,6 +459,7 @@ export async function createAssignment({
     siteId,
     floorId: floorId || "",
     areaId: areaId || "",
+    areaEnteredAt: serverTimestamp(),
     workerId,
     timeNoteLeft: typeof timeNoteLeft === "string" ? timeNoteLeft : "",
     timeNoteRight: typeof timeNoteRight === "string" ? timeNoteRight : "",
@@ -500,6 +516,7 @@ export async function updateAssignmentArea({
   const ref = siteDocument(userId, siteId, "assignments", assignmentId);
   const payload = {
     areaId,
+    areaEnteredAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   };
   if (typeof floorId === "string") {
@@ -536,7 +553,8 @@ export async function updateAssignmentsOrder({ userId, siteId, updates }) {
       assignmentId: u.assignmentId || u.id,
       areaId: typeof u.areaId === "string" ? u.areaId : undefined,
       floorId: typeof u.floorId === "string" ? u.floorId : undefined,
-      order: typeof u.order === "number" ? u.order : idx
+      order: typeof u.order === "number" ? u.order : idx,
+      areaEnteredAt: u.areaEnteredAt === true
     }))
     .filter((u) => u.assignmentId)
     .forEach((u) => {
@@ -547,6 +565,9 @@ export async function updateAssignmentsOrder({ userId, siteId, updates }) {
       }
       if (typeof u.floorId === "string") {
         payload.floorId = u.floorId;
+      }
+      if (u.areaEnteredAt) {
+        payload.areaEnteredAt = serverTimestamp();
       }
       batch.update(ref, payload);
     });
@@ -595,6 +616,71 @@ export async function getAssignmentsByDate({ userId, siteId, floorId, date }) {
   const q1 = query(col, ...filters);
   const snap = await getDocs(q1);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+function skillCountLogRef(userId, siteId, dateKey, logId) {
+  return doc(
+    db,
+    "users",
+    userId,
+    "sites",
+    siteId,
+    "skillCountLogs",
+    dateKey,
+    "entries",
+    logId
+  );
+}
+
+export async function recordSkillEmploymentCount({
+  userId,
+  siteId,
+  dateKey,
+  workerId,
+  floorId,
+  areaId,
+  skillIds,
+  thresholdMinutes = 120,
+  continuousMinutes = 0
+}) {
+  assertUserSite({ userId, siteId });
+  if (!workerId || !areaId) return false;
+  if (!Array.isArray(skillIds) || skillIds.length === 0) return false;
+  const normalizedSkills = skillIds.map((id) => String(id || "").trim()).filter(Boolean);
+  if (!normalizedSkills.length) return false;
+  const normalizedDate = String(dateKey || "").trim();
+  if (!normalizedDate) return false;
+  const logId = `${workerId}__${floorId || ""}__${areaId || ""}`;
+  const logRef = skillCountLogRef(userId, siteId, normalizedDate, logId);
+  const workerRef = siteDocument(userId, siteId, "workers", workerId);
+  return runTransaction(db, async (tx) => {
+    const logSnap = await tx.get(logRef);
+    if (logSnap.exists()) {
+      return false;
+    }
+    const workerSnap = await tx.get(workerRef);
+    const logPayload = {
+      workerId,
+      floorId: floorId || "",
+      areaId,
+      date: normalizedDate,
+      countedAt: serverTimestamp(),
+      thresholdMinutes: Number(thresholdMinutes || 0) || 120,
+      skillIds: normalizedSkills,
+      continuousMinutes: Number(continuousMinutes || 0)
+    };
+    tx.set(logRef, logPayload);
+    const updatePayload = { updatedAt: serverTimestamp() };
+    normalizedSkills.forEach((skillId) => {
+      updatePayload[`skillEmploymentCounts.${skillId}`] = increment(1);
+    });
+    if (workerSnap.exists()) {
+      tx.update(workerRef, updatePayload);
+    } else {
+      tx.set(workerRef, { workerId, ...updatePayload }, { merge: true });
+    }
+    return true;
+  });
 }
 
 /* =========================

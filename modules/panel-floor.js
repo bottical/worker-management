@@ -7,7 +7,11 @@ import {
 } from "../api/firebase.js";
 import { fmtRange, toast } from "../core/ui.js";
 import { getContrastTextColor } from "../core/colors.js";
-import { createSkillColumns, normalizeSkillLevels } from "./skill-layout.js";
+import {
+  createSkillColumns,
+  normalizeSkillEmploymentCounts,
+  normalizeSkillLevels
+} from "./skill-layout.js";
 
 /**
  * フロア（ゾーン）側の描画と、在籍の反映を担う
@@ -233,7 +237,8 @@ export function makeFloor(
         ? w.employmentCount
         : Number(w.employmentCount || 0),
       memo: w.memo || "",
-      skillLevels: normalizeSkillLevels(w.skillLevels)
+      skillLevels: normalizeSkillLevels(w.skillLevels),
+      skillEmploymentCounts: normalizeSkillEmploymentCounts(w.skillEmploymentCounts)
     };
   }
 
@@ -477,7 +482,8 @@ export function makeFloor(
 
     const { left, right } = createSkillColumns(
       _skillSettings,
-      normalizeSkillLevels(info.skillLevels)
+      normalizeSkillLevels(info.skillLevels),
+      normalizeSkillEmploymentCounts(info.skillEmploymentCounts)
     );
     const body = buildCardBody(info, areaId, floorId, timeNotes);
 
@@ -785,6 +791,10 @@ export function makeFloor(
       const fromFloor = e.dataTransfer.getData("fromFloorId") || "";
       const sourceKey = areaKey(from, fromFloor);
       const targetKey = areaKey(targetAreaId, dropFloorId);
+      const normalizedFrom = normalizeAreaId(from);
+      const normalizedTarget = normalizeAreaId(targetAreaId);
+      const isSameSpot =
+        normalizedFrom === normalizedTarget && (fromFloor || "") === (dropFloorId || "");
       const assignmentsByArea = groupAssignments();
       const movingRow = currentAssignments.find((row) => row.id === assignmentId);
       const originalTarget = sortAssignments(assignmentsByArea.get(targetKey) || []);
@@ -819,12 +829,16 @@ export function makeFloor(
         if (unchanged) return;
       }
       targetList.forEach((row, idx) => {
-        updates.push({
+        const payload = {
           assignmentId: row.id,
           areaId: row.areaId || targetAreaId,
           floorId: row.floorId || dropFloorId,
           order: idx
-        });
+        };
+        if (row.id === assignmentId && !isSameSpot) {
+          payload.areaEnteredAt = true;
+        }
+        updates.push(payload);
       });
       if (targetKey !== sourceKey) {
         sourceList.forEach((row, idx) => {
@@ -858,10 +872,6 @@ export function makeFloor(
       });
       await persistOrders(updates, "配置エリアの更新に失敗しました");
       const mentorship = getMentorship(workerId);
-      const normalizedFrom = normalizeAreaId(from);
-      const normalizedTarget = normalizeAreaId(targetAreaId);
-      const isSameSpot =
-        normalizedFrom === normalizedTarget && (fromFloor || "") === (dropFloorId || "");
       const shouldDetachMentorship = mentorship.mentorId && !isSameSpot;
       if (shouldDetachMentorship) {
         await requestMentorshipChange({

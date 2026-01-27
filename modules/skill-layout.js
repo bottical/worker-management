@@ -14,6 +14,18 @@ export function normalizeSkillLevels(levels = {}) {
   return result;
 }
 
+export function normalizeSkillEmploymentCounts(counts = {}) {
+  if (!counts || typeof counts !== "object") return {};
+  const result = {};
+  Object.entries(counts).forEach(([key, value]) => {
+    const num = Number(value);
+    if (Number.isFinite(num)) {
+      result[key] = num;
+    }
+  });
+  return result;
+}
+
 function getLevelOrder(skillSettings = DEFAULT_SKILL_SETTINGS) {
   const order = new Map();
   (skillSettings?.levels || DEFAULT_SKILL_SETTINGS.levels).forEach((level, idx) => {
@@ -53,21 +65,35 @@ function createSkillIndicator(skill, levelId, levelOrder, idx) {
   return indicator;
 }
 
+function createSkillCount(value) {
+  const countEl = document.createElement("div");
+  countEl.className = "skill-count";
+  const normalized = Number.isFinite(Number(value)) ? Number(value) : 0;
+  countEl.textContent = String(normalized);
+  return countEl;
+}
+
 function createSkillColumn() {
   const column = document.createElement("div");
   column.className = "skill-column";
   return column;
 }
 
-export function createSkillColumns(skillSettings = DEFAULT_SKILL_SETTINGS, skillLevels = {}) {
+export function createSkillColumns(
+  skillSettings = DEFAULT_SKILL_SETTINGS,
+  skillLevels = {},
+  skillCounts = {}
+) {
   const skills = getNormalizedSkills(skillSettings);
   const levelOrder = getLevelOrder(skillSettings);
   const columns = Array.from({ length: 4 }, () => createSkillColumn());
 
   skills.forEach((skill, idx) => {
     const levelId = skillLevels?.[skill.id] || "";
+    const countValue = skillCounts?.[skill.id] ?? 0;
     const column = columns[idx % columns.length];
     column.appendChild(createSkillIndicator(skill, levelId, levelOrder, idx));
+    column.appendChild(createSkillCount(countValue));
   });
 
   const left = document.createElement("div");

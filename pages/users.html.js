@@ -9,6 +9,7 @@ import {
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 import { normalizeHex } from "../core/colors.js";
+import { normalizeSkillEmploymentCounts } from "../modules/skill-layout.js";
 
 const DEFAULT_START = "09:00";
 const DEFAULT_END = "18:00";
@@ -347,6 +348,7 @@ export function renderUsers(mount){
       { key: "defaultEndTime", label: "End" },
       { key: "active", label: "active" },
       { key: "employmentCount", label: "就業回数" },
+      { key: "skillEmploymentCounts", label: "スキル別就業回数" },
       { key: "memo", label: "備考" }
     ];
     listHeader.innerHTML = `${headers
@@ -585,6 +587,13 @@ export function renderUsers(mount){
     if(key === "employmentCount"){
       return Number(row.employmentCount || 0);
     }
+    if(key === "skillEmploymentCounts"){
+      const counts = normalizeSkillEmploymentCounts(row.skillEmploymentCounts);
+      return skillSettings.skills.reduce(
+        (sum, skill) => sum + (counts?.[skill.id] || 0),
+        0
+      );
+    }
     if(key === "memo"){
       return row.memo || "";
     }
@@ -765,6 +774,12 @@ export function renderUsers(mount){
       tr.dataset.workerId = w.workerId;
       const source = pendingEdits.get(w.workerId) || w;
       const employmentCount = Number(source.employmentCount || 0);
+      const skillCountMap = normalizeSkillEmploymentCounts(
+        source.skillEmploymentCounts
+      );
+      const skillCountText = skillSettings.skills
+        .map((skill) => Number(skillCountMap?.[skill.id] || 0))
+        .join(" / ");
       const memo = source.memo || "";
       const skillCells = skillSettings.skills
         .map((skill)=>{
@@ -794,6 +809,7 @@ export function renderUsers(mount){
           </select>
         </td>
         <td class="mono"><input data-field="employmentCount" type="number" min="0" step="1" value="${employmentCount}" style="width:100%"></td>
+        <td class="mono">${skillCountText}</td>
         <td><textarea data-field="memo" rows="1">${memo}</textarea></td>
         <td class="row-actions" style="white-space:nowrap">
           <button data-reset="${w.workerId}" class="button ghost">元に戻す</button>
@@ -851,7 +867,10 @@ export function renderUsers(mount){
             defaultEndTime: row.defaultEndTime || DEFAULT_END,
             employmentCount: Number(row.employmentCount || 0),
             memo: row.memo || "",
-            skillLevels: normalizeSkillLevels(row.skillLevels)
+            skillLevels: normalizeSkillLevels(row.skillLevels),
+            skillEmploymentCounts: normalizeSkillEmploymentCounts(
+              row.skillEmploymentCounts
+            )
           }
         ));
         const ids = new Set(currentRows.map((r)=>r.workerId));

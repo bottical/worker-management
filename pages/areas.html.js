@@ -6,7 +6,9 @@ import {
   saveFloors,
   getAreasOnce,
   DEFAULT_AREAS,
-  DEFAULT_FLOORS
+  DEFAULT_FLOORS,
+  DEFAULT_SKILL_SETTINGS,
+  subscribeSkillSettings
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
 
@@ -53,6 +55,17 @@ export function renderAreas(mount) {
         <label>行番号（1〜、未入力で自動）<input name="gridRow" type="number" min="1" max="12" /></label>
         <label>横幅（列数）<input name="colSpan" type="number" min="1" max="12" placeholder="1" /></label>
         <label>縦幅（行数）<input name="rowSpan" type="number" min="1" max="12" placeholder="1" /></label>
+        <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px">
+          <input type="checkbox" name="countingEnabled" id="countingEnabled" />
+          就業カウントを有効化
+        </label>
+        <label style="grid-column:1/-1">
+          対象スキル（複数選択）
+          <select name="countingSkillIds" id="countingSkillIds" multiple size="4" style="width:100%"></select>
+        </label>
+        <label>閾値（分）
+          <input name="countingThresholdMinutes" id="countingThresholdMinutes" type="number" min="1" placeholder="120" />
+        </label>
         <div class="form-actions" style="grid-column:1/-1">
           <button class="button" type="submit">追加 / 更新</button>
           <button class="button ghost" type="button" id="clearForm">クリア</button>
@@ -87,6 +100,9 @@ export function renderAreas(mount) {
   const areaRowsEl = wrap.querySelector("#areaRows");
   const columnCountInput = wrap.querySelector("#columnCount");
   const saveLayoutBtn = wrap.querySelector("#saveLayout");
+  const countingEnabledInput = wrap.querySelector("#countingEnabled");
+  const countingSkillSelect = wrap.querySelector("#countingSkillIds");
+  const countingThresholdInput = wrap.querySelector("#countingThresholdMinutes");
 
   let floors = DEFAULT_FLOORS.slice();
   let floorsLoaded = false;
@@ -96,8 +112,10 @@ export function renderAreas(mount) {
     state.site.floorId || floors[0]?.id || DEFAULT_FLOORS[0]?.id || "";
   let unsubFloors = () => {};
   let unsubAreas = () => {};
+  let unsubSkillSettings = () => {};
   const areaCache = new Map();
   const layoutCache = new Map();
+  let skillSettings = { ...DEFAULT_SKILL_SETTINGS };
 
   function toPositiveInt(value) {
     const num = Number(value);
@@ -136,6 +154,52 @@ export function renderAreas(mount) {
   function renderLayoutInputs() {
     if (!columnCountInput) return;
     columnCountInput.value = layoutConfig.columns || "";
+  }
+
+  function setCountingFieldState(enabled) {
+    if (countingSkillSelect) {
+      countingSkillSelect.disabled = !enabled;
+    }
+    if (countingThresholdInput) {
+      countingThresholdInput.disabled = !enabled;
+    }
+  }
+
+  function renderCountingSkillOptions(selectedIds = []) {
+    if (!countingSkillSelect) return;
+    const normalizedSelected = new Set(
+      (selectedIds || []).map((id) => String(id || "").trim()).filter(Boolean)
+    );
+    countingSkillSelect.innerHTML = "";
+    const skills = skillSettings?.skills?.length
+      ? skillSettings.skills
+      : DEFAULT_SKILL_SETTINGS.skills;
+    skills.forEach((skill) => {
+      const opt = document.createElement("option");
+      opt.value = skill.id;
+      opt.textContent = skill.name || skill.id;
+      if (normalizedSelected.has(skill.id)) {
+        opt.selected = true;
+      }
+      countingSkillSelect.appendChild(opt);
+    });
+  }
+
+  function getSelectedSkillIds() {
+    return Array.from(countingSkillSelect?.selectedOptions || [])
+      .map((opt) => opt.value)
+      .filter(Boolean);
+  }
+
+  function resetCountingForm() {
+    if (countingEnabledInput) {
+      countingEnabledInput.checked = false;
+    }
+    if (countingThresholdInput) {
+      countingThresholdInput.value = "120";
+    }
+    renderCountingSkillOptions([]);
+    setCountingFieldState(false);
   }
 
   function readLayoutFromInput() {
@@ -292,6 +356,14 @@ export function renderAreas(mount) {
         areaForm.gridRow.value = target.gridRow || "";
         areaForm.colSpan.value = target.colSpan || "";
         areaForm.rowSpan.value = target.rowSpan || "";
+        if (countingEnabledInput) {
+          countingEnabledInput.checked = target.counting?.enabled === true;
+        }
+        if (countingThresholdInput) {
+          countingThresholdInput.value = target.counting?.thresholdMinutes || 120;
+        }
+        renderCountingSkillOptions(target.counting?.skillIds || []);
+        setCountingFieldState(countingEnabledInput?.checked);
         areaForm.areaId.focus();
       });
     });
@@ -557,9 +629,16 @@ export function renderAreas(mount) {
     const gridRow = toPositiveInt(fd.get("gridRow"));
     const colSpan = toPositiveInt(fd.get("colSpan"));
     const rowSpan = toPositiveInt(fd.get("rowSpan"));
+    const countingEnabled = Boolean(countingEnabledInput?.checked);
+    const countingSkillIds = countingEnabled ? getSelectedSkillIds() : [];
+    const countingThresholdMinutes =
+      toPositiveInt(fd.get("countingThresholdMinutes")) || 120;
     if (!areaId || !label) {
       toast("エリアIDと表示名を入力してください", "error");
       return;
+    }
+    if (countingEnabled && countingSkillIds.length === 0) {
+      toast("対象スキルが未設定です");
     }
     const next = areas.slice();
     const index = next.findIndex((a) => a.id === areaId);
@@ -579,21 +658,46 @@ export function renderAreas(mount) {
         gridColumn,
         gridRow,
         colSpan,
-        rowSpan
+        rowSpan,
+        counting: {
+          enabled: countingEnabled,
+          skillIds: countingSkillIds,
+          thresholdMinutes: countingThresholdMinutes
+        }
       };
     } else {
-      next.push({ id: areaId, label, columns, minWidth, gridColumn, gridRow, colSpan, rowSpan });
+      next.push({
+        id: areaId,
+        label,
+        columns,
+        minWidth,
+        gridColumn,
+        gridRow,
+        colSpan,
+        rowSpan,
+        counting: {
+          enabled: countingEnabled,
+          skillIds: countingSkillIds,
+          thresholdMinutes: countingThresholdMinutes
+        }
+      });
     }
     await persistAreas(next, index >= 0 ? "エリアを更新しました" : "エリアを追加しました");
     areaForm.reset();
+    resetCountingForm();
   });
 
   clearAreaBtn?.addEventListener("click", () => {
     areaForm.reset();
+    resetCountingForm();
   });
 
   saveLayoutBtn?.addEventListener("click", async () => {
     await persistAreas(areas.slice(), "配置設定を更新しました");
+  });
+
+  countingEnabledInput?.addEventListener("change", (e) => {
+    setCountingFieldState(e.target.checked);
   });
 
   floorSelect?.addEventListener("change", (e) => {
@@ -634,10 +738,22 @@ export function renderAreas(mount) {
     }
   );
 
+  unsubSkillSettings = subscribeSkillSettings(
+    {
+      userId: state.site.userId,
+      siteId: state.site.siteId
+    },
+    (settings) => {
+      skillSettings = settings || { ...DEFAULT_SKILL_SETTINGS };
+      renderCountingSkillOptions(getSelectedSkillIds());
+    }
+  );
+
   subscribeAreasForFloor();
   renderFloorRows();
   renderFloorSelect();
   updateFloorHint();
+  resetCountingForm();
   renderAreaRows();
 
   window.addEventListener(
@@ -652,6 +768,11 @@ export function renderAreas(mount) {
         unsubAreas();
       } catch (err) {
         console.warn("unsubAreas failed", err);
+      }
+      try {
+        unsubSkillSettings();
+      } catch (err) {
+        console.warn("unsubSkillSettings failed", err);
       }
     },
     { once: true }

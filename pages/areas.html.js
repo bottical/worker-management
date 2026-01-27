@@ -573,7 +573,8 @@ export function renderAreas(mount) {
       gridColumn: toPositiveInt(a.gridColumn),
       gridRow: toPositiveInt(a.gridRow),
       colSpan: toPositiveInt(a.colSpan),
-      rowSpan: toPositiveInt(a.rowSpan)
+      rowSpan: toPositiveInt(a.rowSpan),
+      counting: a.counting
     }));
     areaCache.set(currentFloorId, { areas: areas.slice(), layout: layoutConfig });
     layoutCache.set(currentFloorId, layoutConfig);

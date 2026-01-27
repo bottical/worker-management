@@ -473,14 +473,22 @@ export async function createAssignment({
   const ref = await addDoc(col, payload);
   try {
     const workerRef = siteDocument(userId, siteId, "workers", workerId);
-    await setDoc(
-      workerRef,
-      {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(workerRef);
+      const data = snap.exists() ? snap.data() : {};
+      const lastWorkDate =
+        typeof data?.lastWorkDate === "string" ? data.lastWorkDate : "";
+      const assignmentDate = payload.date;
+      const updatePayload = {
         employmentCount: increment(1),
         updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    );
+      };
+      if (assignmentDate && (!lastWorkDate || assignmentDate > lastWorkDate)) {
+        updatePayload.previousWorkDate = lastWorkDate || "";
+        updatePayload.lastWorkDate = assignmentDate;
+      }
+      tx.set(workerRef, updatePayload, { merge: true });
+    });
   } catch (err) {
     console.warn("[Assignments] failed to increment employmentCount", err);
   }

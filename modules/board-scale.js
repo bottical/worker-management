@@ -42,7 +42,7 @@ export function setupBoardScale({ viewportEl, stageEl, options = {} }) {
 
     const scaledWidth = baseW * scale;
     const scaledHeight = baseH * scale;
-    const offsetX = Math.max(0, (safeW - scaledWidth) / 2);
+    const offsetX = 0;
 
     viewportEl.style.setProperty("--board-scale", `${scale}`);
     viewportEl.style.setProperty("--board-offset-x", `${offsetX}px`);

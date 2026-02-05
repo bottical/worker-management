@@ -42,6 +42,7 @@ export function renderAreas(mount) {
         <label>表示列数（このフロア全体）<input name="columnCount" id="columnCount" type="number" min="1" max="12" placeholder="自動" /></label>
       </div>
       <div class="hint" id="currentFloorHint" style="margin-top:4px"></div>
+      <div class="hint">※ 列数・最小幅は 1920x1080 の仮想ボード基準で設定されます（実表示は拡大縮小）。</div>
       <div class="form-actions" style="margin-top:8px">
         <div class="hint">空欄のまま保存すると従来通り自動で列幅を決定します。</div>
         <button class="button ghost" type="button" id="saveLayout">配置設定のみ保存</button>
@@ -50,7 +51,7 @@ export function renderAreas(mount) {
         <label>エリアID（例: A）<input name="areaId" required maxlength="20" /></label>
         <label>表示名（例: エリアA）<input name="label" required maxlength="40" /></label>
         <label>列数（1=縦1列）<input name="columns" type="number" min="1" max="8" placeholder="2" /></label>
-        <label>カード最小幅（px）<input name="minWidth" type="number" min="80" placeholder="120" /></label>
+        <label>カード最小幅（仮想ボードpx）<input name="minWidth" type="number" min="80" placeholder="120" /></label>
         <label>列番号（1〜、未入力で自動）<input name="gridColumn" type="number" min="1" max="12" /></label>
         <label>行番号（1〜、未入力で自動）<input name="gridRow" type="number" min="1" max="12" /></label>
         <label>横幅（列数）<input name="colSpan" type="number" min="1" max="12" placeholder="1" /></label>

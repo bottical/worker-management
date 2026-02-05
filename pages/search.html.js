@@ -165,7 +165,7 @@ function buildOvertimeValueUI({ assignment, container, codeInput }) {
 
 export function renderSearch(mount) {
   const box = document.createElement("div");
-  box.className = "panel";
+  box.className = "panel board-scale-exempt";
   box.innerHTML = `
     <h2>作業者検索</h2>
     <div class="form grid twocol">

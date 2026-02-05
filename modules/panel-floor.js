@@ -254,6 +254,8 @@ export function makeFloor(
     const w = _workerMap.get(workerId) || {};
     return {
       name: w.name || workerId,
+      lastWorkDate: w.lastWorkDate || "",
+      previousWorkDate: w.previousWorkDate || "",
       start: w.defaultStartTime || "",
       end: w.defaultEndTime || "",
       panelColor: w.panel?.color || w.panelColor || "",

@@ -9,7 +9,11 @@ import {
 import { toast } from "../core/ui.js";
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  const dt = new Date();
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, "0");
+  const day = String(dt.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 const OVERTIME_CANDIDATES = ["18", "19", "20", "20.5", "21", "22", "23"];
@@ -38,8 +42,15 @@ function formatHalfHour(value) {
 
 function isValidDateString(value) {
   if (!value) return false;
-  const dt = new Date(`${value}T00:00:00`);
-  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === value;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
+
+  const dt = new Date(year, month - 1, day);
+  return dt.getFullYear() === year && dt.getMonth() === month - 1 && dt.getDate() === day;
 }
 
 function pickLatestAssignment(assignments, workerId) {

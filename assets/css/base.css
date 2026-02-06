@@ -1,7 +1,7 @@
 :root{
   --bg:#f8fafc; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --accent:#2563eb; --border:#e2e8f0;
   --area:#eef2ff; --chip:#e2e8f0; --danger:#ef4444;
-  --board-scale:1; --board-max-width:1920px; --board-max-height:1080px;
+  --board-scale:1;
   --dashboard-font-scale:var(--board-scale,1);
   --mentor-blue: var(--accent, #2563eb);
   --mentor-line-x:20%;
@@ -18,12 +18,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .twocol{grid-template-columns:320px 1fr;align-items:start}
 .dashboard-grid{grid-template-columns:280px 1fr;width:100%;--dashboard-font-scale:var(--board-scale,1)}
 .dashboard-grid .card{font-size:calc(20px * var(--dashboard-font-scale,1))}
-.board-viewport{position:relative;width:100%;height:calc(100vh - 140px);min-height:520px;overflow:auto}
+.board-viewport{position:relative;width:100%;height:calc(100vh - 140px);min-height:520px;overflow-x:hidden;overflow-y:auto}
 .board-stage{
-  width:var(--board-max-width);
-  height:var(--board-max-height);
-  transform-origin:top left;
-  transform:translate(var(--board-offset-x,0px), var(--board-offset-y,0px)) scale(var(--board-scale,1));
+  width:100%;
+  max-width:100%;
+  height:auto;
+  transform:none;
 }
 
 .board-scale-exempt{--board-scale:1;--dashboard-font-scale:1}

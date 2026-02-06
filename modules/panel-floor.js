@@ -456,7 +456,10 @@ export function makeFloor(
 
     const memo = document.createElement("div");
     memo.className = "card-memo hint";
-    memo.textContent = info.memo ? `備考: ${info.memo}` : "備考: -";
+    const normalizedMemo = typeof info.memo === "string" ? info.memo : "";
+    const truncatedMemo =
+      normalizedMemo.length > 5 ? `${normalizedMemo.slice(0, 5)}...` : normalizedMemo;
+    memo.textContent = truncatedMemo ? `備考: ${truncatedMemo}` : "備考: -";
 
     const lastWork = document.createElement("div");
     lastWork.className = "employment-count";

@@ -23,7 +23,6 @@ import {
   normalizeSkillEmploymentCounts,
   normalizeSkillLevels
 } from "../modules/skill-layout.js";
-import { setupBoardScale } from "../modules/board-scale.js";
 
 const ALL_FLOOR_VALUE = "__all__";
 const SKILL_COUNT_INTERVAL_MS = 60000;
@@ -80,8 +79,6 @@ export function renderDashboard(mount) {
   const floorSelect = toolbar.querySelector("#floorSelect");
   const fallbackToggle = toolbar.querySelector("#toggleFallback");
   const viewModeEl = toolbar.querySelector("#viewMode");
-
-  setupBoardScale({ viewportEl: viewport, stageEl: stage });
 
   function toWorkerMaster(row) {
     if (!row) return null;

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Worker Card Layout Repro</title>
+  <link rel="stylesheet" href="assets/css/base.css" />
+  <style>
+    body { padding: 20px; }
+    .demo-grid { display: flex; gap: 16px; flex-wrap: wrap; }
+    .demo-width { border: 1px dashed #cbd5e1; padding: 10px; border-radius: 8px; background: #fff; }
+    .demo-width h4 { margin: 0 0 8px; font-size: 12px; color: #64748b; }
+    .demo-width.w200 { width: 200px; }
+    .demo-width.w150 { width: 150px; }
+    .demo-width .card { cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="demo-grid">
+    <div class="demo-width w200">
+      <h4>width: 200px</h4>
+      <div class="card">
+        <div class="card-body">
+          <div class="card-header"><div class="card-name">山田 太郎</div></div>
+          <div class="card-time-row"><div class="card-time">09:00-18:00</div></div>
+          <div class="card-meta-row">
+            <div class="card-memo hint">備考: メモがかなり長いテキストになっても省略表示されることを確認する</div>
+            <div class="employment-count"><span class="label">最終作業日</span><span class="count">2026/02/01</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="demo-width w150">
+      <h4>width: 150px</h4>
+      <div class="card">
+        <div class="card-body">
+          <div class="card-header"><div class="card-name">佐藤 花子</div></div>
+          <div class="card-time-row"><div class="card-time">10:00-17:00</div></div>
+          <div class="card-meta-row">
+            <div class="card-memo hint">備考: 超長文メモが横幅不足時に重ならないことを確認する</div>
+            <div class="employment-count"><span class="label">最終作業日</span><span class="count">2026/01/20</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

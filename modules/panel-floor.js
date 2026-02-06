@@ -22,6 +22,8 @@ const FALLBACK_AREA_ID = "__unassigned__";
 const FALLBACK_AREA_LABEL = "未割当";
 const VIRTUAL_ZONE_BASE_WIDTH = 260; // 1920x1080仮想ボード基準
 const VIRTUAL_SLOT_MIN_WIDTH = 120; // 1920x1080仮想ボード基準
+const VIRTUAL_ZONE_HORIZONTAL_PADDING = 20; // .zone 左右 padding 合計 (10px * 2)
+const VIRTUAL_DROPAREA_GAP = 8; // .droparea gap
 
 export function makeFloor(
   mount,
@@ -1598,9 +1600,11 @@ export function makeFloor(
     const explicit = toPositiveInt(area?.minWidth);
     if (explicit) return explicit;
     const dropColumns = getDropColumns(area);
-    if (dropColumns <= 1) return VIRTUAL_ZONE_BASE_WIDTH;
-    const minWidth = Math.floor(VIRTUAL_ZONE_BASE_WIDTH / dropColumns);
-    return Math.max(VIRTUAL_SLOT_MIN_WIDTH, minWidth);
+    const availableWidth = VIRTUAL_ZONE_BASE_WIDTH - VIRTUAL_ZONE_HORIZONTAL_PADDING;
+    if (dropColumns <= 1) return availableWidth;
+    const totalGap = (dropColumns - 1) * VIRTUAL_DROPAREA_GAP;
+    const minWidth = Math.floor((availableWidth - totalGap) / dropColumns);
+    return Math.max(80, Math.min(VIRTUAL_SLOT_MIN_WIDTH, minWidth));
   }
 
   function applyDropLayout(dropEl, area) {

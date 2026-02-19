@@ -27,7 +27,7 @@ import {
 const ALL_FLOOR_VALUE = "__all__";
 const SKILL_COUNT_INTERVAL_MS = 60000;
 const CARD_SCALE_STORAGE_KEY = "wm:dashboard:cardScale";
-const CARD_SCALE_MIN = 0.8;
+const CARD_SCALE_MIN = 0.6;
 const CARD_SCALE_MAX = 1.4;
 
 function clamp(value, min, max) {
@@ -73,7 +73,7 @@ export function renderDashboard(mount) {
       <input
         type="range"
         id="cardScaleSlider"
-        min="0.8"
+        min="0.6"
         max="1.4"
         step="0.05"
         value="1.0"

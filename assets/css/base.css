@@ -2,7 +2,8 @@
   --bg:#f8fafc; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --accent:#2563eb; --border:#e2e8f0;
   --area:#eef2ff; --chip:#e2e8f0; --danger:#ef4444;
   --board-scale:1;
-  --dashboard-font-scale:var(--board-scale,1);
+  --card-scale:1;
+  --dashboard-font-scale:calc(var(--board-scale,1) * var(--card-scale,1));
   --mentor-blue: var(--accent, #2563eb);
   --mentor-line-x:20%;
 }
@@ -16,7 +17,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
 .grid{display:grid;gap:12px}
 .twocol{grid-template-columns:320px 1fr;align-items:start}
-.dashboard-grid{grid-template-columns:280px 1fr;width:100%;--dashboard-font-scale:var(--board-scale,1)}
+.dashboard-grid{grid-template-columns:280px 1fr;width:100%;--dashboard-font-scale:calc(var(--board-scale,1) * var(--card-scale,1))}
 .dashboard-grid .card{font-size:calc(20px * var(--dashboard-font-scale,1))}
 .board-viewport{position:relative;width:100%;height:calc(100vh - 140px);min-height:520px;overflow-x:hidden;overflow-y:auto}
 .board-stage{
@@ -187,6 +188,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .panel-toolbar{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:12px;align-items:flex-end}
 .panel-toolbar label{display:flex;flex-direction:column;font-size:13px;gap:4px}
 .panel-toolbar input,.panel-toolbar select{padding:8px;border-radius:8px;border:1px solid var(--border);font:inherit}
+.panel-toolbar .card-scale-control input[type="range"]{padding:0}
 .toggle-pool{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;color:var(--ink);cursor:pointer;font:inherit}
 .toggle-pool .icon{font-size:18px;line-height:1}
 .toggle-pool[data-active="false"]{opacity:.6}

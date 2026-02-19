@@ -26,6 +26,13 @@ import {
 
 const ALL_FLOOR_VALUE = "__all__";
 const SKILL_COUNT_INTERVAL_MS = 60000;
+const CARD_SCALE_STORAGE_KEY = "wm:dashboard:cardScale";
+const CARD_SCALE_MIN = 0.8;
+const CARD_SCALE_MAX = 1.4;
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
 
 export function renderDashboard(mount) {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -61,6 +68,18 @@ export function renderDashboard(mount) {
   toolbar.innerHTML = `
     <label>フロア<select id="floorSelect"></select></label>
     <label>表示日<input type="date" id="assignmentDate" /></label>
+    <label class="card-scale-control">
+      カードサイズ
+      <input
+        type="range"
+        id="cardScaleSlider"
+        min="0.8"
+        max="1.4"
+        step="0.05"
+        value="1.0"
+      />
+      <span id="cardScaleValue">100%</span>
+    </label>
     <button type="button" id="toggleFallback" class="toggle-pool" aria-pressed="true" title="未配置カラムを非表示">
       <span class="icon" aria-hidden="true">≡</span>
       <span class="label">未配置カラム</span>
@@ -77,8 +96,29 @@ export function renderDashboard(mount) {
   const countEl = wrap.querySelector("#count");
   const dateInput = toolbar.querySelector("#assignmentDate");
   const floorSelect = toolbar.querySelector("#floorSelect");
+  const cardScaleSlider = toolbar.querySelector("#cardScaleSlider");
+  const cardScaleValue = toolbar.querySelector("#cardScaleValue");
   const fallbackToggle = toolbar.querySelector("#toggleFallback");
   const viewModeEl = toolbar.querySelector("#viewMode");
+
+  const savedCardScale = Number(localStorage.getItem(CARD_SCALE_STORAGE_KEY));
+  const initialCardScale = Number.isFinite(savedCardScale)
+    ? clamp(savedCardScale, CARD_SCALE_MIN, CARD_SCALE_MAX)
+    : 1;
+  document.documentElement.style.setProperty("--card-scale", initialCardScale);
+  cardScaleSlider.value = String(initialCardScale);
+  cardScaleValue.textContent = `${Math.round(initialCardScale * 100)}%`;
+
+  cardScaleSlider.addEventListener("input", (event) => {
+    const value = clamp(
+      Number(event.target.value),
+      CARD_SCALE_MIN,
+      CARD_SCALE_MAX
+    );
+    document.documentElement.style.setProperty("--card-scale", value);
+    cardScaleValue.textContent = `${Math.round(value * 100)}%`;
+    localStorage.setItem(CARD_SCALE_STORAGE_KEY, String(value));
+  });
 
   function toWorkerMaster(row) {
     if (!row) return null;

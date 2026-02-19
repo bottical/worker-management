@@ -18,9 +18,40 @@ export function renderAreas(mount) {
   wrap.innerHTML = `
     <h2>フロア／エリア管理</h2>
     <div class="hint">サイト: ${state.site.siteId}</div>
-    <section class="panel-sub" id="floorSection">
-      <h3>フロア設定</h3>
-      <form id="floorForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:16px">
+    <section class="panel-sub" id="areaSection" style="margin-top:12px">
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:8px">
+        <label style="min-width:260px;flex:1">対象フロア
+          <select id="floorSelect"></select>
+        </label>
+        <button class="button ghost" type="button" id="openFloorManager">⚙ フロア管理</button>
+      </div>
+      <div class="hint" id="currentFloorHint" style="margin-top:4px"></div>
+      <div class="panel-sub" style="margin-top:16px;padding:12px;border:1px solid var(--border);border-radius:10px">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;justify-content:space-between">
+          <label style="min-width:220px">表示列数（このフロア全体）
+            <input name="columnCount" id="columnCount" type="number" min="1" max="12" placeholder="自動" />
+          </label>
+          <button class="button ghost" type="button" id="saveLayout">配置設定を保存</button>
+        </div>
+        <div class="hint" style="margin-top:8px">※ 列数・最小幅は 1920x1080 の仮想ボード基準で設定されます（実表示は拡大縮小）。</div>
+      </div>
+      <table class="table" style="margin-top:16px">
+        <thead>
+          <tr><th>#</th><th>ID</th><th>表示名</th><th>サイズ</th><th>配置</th><th>就業カウント</th><th>操作</th></tr>
+        </thead>
+        <tbody id="areaRows"></tbody>
+      </table>
+      <div class="form-actions" style="margin-top:12px">
+        <button class="button" type="button" id="openAreaCreate">＋ 新規エリア追加</button>
+      </div>
+    </section>
+
+    <dialog id="floorDialog" style="border:1px solid var(--border);border-radius:12px;max-width:760px;width:min(760px,92vw)">
+      <form method="dialog" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">
+        <h3 style="margin:0">フロア管理</h3>
+        <button class="button ghost" value="cancel">閉じる</button>
+      </form>
+      <form id="floorForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
         <label>フロアID（例: 1F）<input name="floorId" required maxlength="40" /></label>
         <label>表示名（例: 1階）<input name="floorLabel" required maxlength="40" /></label>
         <div class="form-actions" style="grid-column:1/-1">
@@ -34,51 +65,49 @@ export function renderAreas(mount) {
         </thead>
         <tbody id="floorRows"></tbody>
       </table>
-    </section>
-    <section class="panel-sub" id="areaSection" style="margin-top:24px">
-      <h3>エリア設定</h3>
-      <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:8px">
-        <label>対象フロア<select id="floorSelect"></select></label>
-        <label>表示列数（このフロア全体）<input name="columnCount" id="columnCount" type="number" min="1" max="12" placeholder="自動" /></label>
-      </div>
-      <div class="hint" id="currentFloorHint" style="margin-top:4px"></div>
-      <div class="hint">※ 列数・最小幅は 1920x1080 の仮想ボード基準で設定されます（実表示は拡大縮小）。</div>
-      <div class="form-actions" style="margin-top:8px">
-        <div class="hint">空欄のまま保存すると従来通り自動で列幅を決定します。</div>
-        <button class="button ghost" type="button" id="saveLayout">配置設定のみ保存</button>
-      </div>
-      <form id="areaForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:16px">
+    </dialog>
+
+    <dialog id="areaDialog" style="border:1px solid var(--border);border-radius:12px;max-width:860px;width:min(860px,94vw)">
+      <form method="dialog" style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">
+        <h3 id="areaDialogTitle" style="margin:0">エリア追加</h3>
+        <button class="button ghost" value="cancel">閉じる</button>
+      </form>
+      <form id="areaForm" class="form" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-top:8px">
+        <div style="grid-column:1/-1;font-weight:700">基本情報</div>
         <label>エリアID（例: A）<input name="areaId" required maxlength="20" /></label>
         <label>表示名（例: エリアA）<input name="label" required maxlength="40" /></label>
+        <div style="grid-column:1/-1;font-weight:700">配置設定</div>
         <label>列数（1=縦1列）<input name="columns" type="number" min="1" max="8" placeholder="2" /></label>
         <label>カード最小幅（仮想ボードpx）<input name="minWidth" type="number" min="80" placeholder="120" /></label>
-        <label>列番号（1〜、未入力で自動）<input name="gridColumn" type="number" min="1" max="12" /></label>
-        <label>行番号（1〜、未入力で自動）<input name="gridRow" type="number" min="1" max="12" /></label>
-        <label>横幅（列数）<input name="colSpan" type="number" min="1" max="12" placeholder="1" /></label>
-        <label>縦幅（行数）<input name="rowSpan" type="number" min="1" max="12" placeholder="1" /></label>
+        <details style="grid-column:1/-1">
+          <summary style="cursor:pointer">詳細なグリッド配置設定</summary>
+          <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-top:10px">
+            <label>列番号（1〜、未入力で自動）<input name="gridColumn" type="number" min="1" max="12" /></label>
+            <label>行番号（1〜、未入力で自動）<input name="gridRow" type="number" min="1" max="12" /></label>
+            <label>横幅（列数）<input name="colSpan" type="number" min="1" max="12" placeholder="1" /></label>
+            <label>縦幅（行数）<input name="rowSpan" type="number" min="1" max="12" placeholder="1" /></label>
+          </div>
+        </details>
+        <div style="grid-column:1/-1;font-weight:700">就業カウント設定</div>
         <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px">
           <input type="checkbox" name="countingEnabled" id="countingEnabled" />
-          就業カウントを有効化
+          カウントを有効にする
         </label>
-        <label style="grid-column:1/-1">
-          対象スキル（複数選択）
-          <select name="countingSkillIds" id="countingSkillIds" multiple size="4" style="width:100%"></select>
-        </label>
-        <label>閾値（分）
-          <input name="countingThresholdMinutes" id="countingThresholdMinutes" type="number" min="1" placeholder="120" />
-        </label>
-        <div class="form-actions" style="grid-column:1/-1">
-          <button class="button" type="submit">追加 / 更新</button>
+        <div id="countingConfigFields" style="grid-column:1/-1;display:grid;grid-template-columns:2fr 1fr;gap:12px">
+          <label>
+            対象スキル（複数選択）
+            <select name="countingSkillIds" id="countingSkillIds" multiple size="4" style="width:100%"></select>
+          </label>
+          <label>閾値（分）
+            <input name="countingThresholdMinutes" id="countingThresholdMinutes" type="number" min="1" placeholder="120" />
+          </label>
+        </div>
+        <div class="form-actions" style="grid-column:1/-1;justify-content:flex-end">
           <button class="button ghost" type="button" id="clearForm">クリア</button>
+          <button class="button" type="submit">保存</button>
         </div>
       </form>
-      <table class="table" style="margin-top:16px">
-        <thead>
-          <tr><th>#</th><th>ID</th><th>表示名</th><th>列数</th><th>配置</th><th>対象スキル</th><th>操作</th></tr>
-        </thead>
-        <tbody id="areaRows"></tbody>
-      </table>
-    </section>
+    </dialog>
   `;
   mount.appendChild(wrap);
 
@@ -93,17 +122,23 @@ export function renderAreas(mount) {
   const floorForm = wrap.querySelector("#floorForm");
   const clearFloorBtn = wrap.querySelector("#clearFloor");
   const floorRowsEl = wrap.querySelector("#floorRows");
+  const floorDialog = wrap.querySelector("#floorDialog");
+  const openFloorManagerBtn = wrap.querySelector("#openFloorManager");
   const floorSelect = wrap.querySelector("#floorSelect");
   const floorHint = wrap.querySelector("#currentFloorHint");
 
   const areaForm = wrap.querySelector("#areaForm");
   const clearAreaBtn = wrap.querySelector("#clearForm");
   const areaRowsEl = wrap.querySelector("#areaRows");
+  const areaDialog = wrap.querySelector("#areaDialog");
+  const areaDialogTitle = wrap.querySelector("#areaDialogTitle");
+  const openAreaCreateBtn = wrap.querySelector("#openAreaCreate");
   const columnCountInput = wrap.querySelector("#columnCount");
   const saveLayoutBtn = wrap.querySelector("#saveLayout");
   const countingEnabledInput = wrap.querySelector("#countingEnabled");
   const countingSkillSelect = wrap.querySelector("#countingSkillIds");
   const countingThresholdInput = wrap.querySelector("#countingThresholdMinutes");
+  const countingConfigFields = wrap.querySelector("#countingConfigFields");
 
   let floors = DEFAULT_FLOORS.slice();
   let floorsLoaded = false;
@@ -164,6 +199,57 @@ export function renderAreas(mount) {
     if (countingThresholdInput) {
       countingThresholdInput.disabled = !enabled;
     }
+    if (countingConfigFields) {
+      countingConfigFields.style.display = enabled ? "grid" : "none";
+    }
+  }
+
+  function openDialog(dialog) {
+    if (!dialog) return;
+    if (typeof dialog.showModal === "function") {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute("open", "open");
+    }
+  }
+
+  function closeDialog(dialog) {
+    if (!dialog) return;
+    if (typeof dialog.close === "function") {
+      dialog.close();
+    } else {
+      dialog.removeAttribute("open");
+    }
+  }
+
+  function fillAreaForm(target = null) {
+    areaForm?.reset();
+    if (!target) {
+      if (areaDialogTitle) areaDialogTitle.textContent = "エリア追加";
+      areaForm.areaId.removeAttribute("readonly");
+      resetCountingForm();
+      return;
+    }
+    if (areaDialogTitle) {
+      areaDialogTitle.textContent = `エリア編集: ${target.label || target.id}`;
+    }
+    areaForm.areaId.value = target.id;
+    areaForm.areaId.setAttribute("readonly", "readonly");
+    areaForm.label.value = target.label;
+    areaForm.columns.value = target.columns || "";
+    areaForm.minWidth.value = target.minWidth || "";
+    areaForm.gridColumn.value = target.gridColumn || "";
+    areaForm.gridRow.value = target.gridRow || "";
+    areaForm.colSpan.value = target.colSpan || "";
+    areaForm.rowSpan.value = target.rowSpan || "";
+    if (countingEnabledInput) {
+      countingEnabledInput.checked = target.counting?.enabled === true;
+    }
+    if (countingThresholdInput) {
+      countingThresholdInput.value = target.counting?.thresholdMinutes || 120;
+    }
+    renderCountingSkillOptions(target.counting?.skillIds || []);
+    setCountingFieldState(countingEnabledInput?.checked);
   }
 
   function renderCountingSkillOptions(selectedIds = []) {
@@ -363,7 +449,11 @@ export function renderAreas(mount) {
         <td>${area.label}</td>
         <td class="mono">${area.columns || "自動"}</td>
         <td class="mono">${formatPlacement(area)}</td>
-        <td>${getCountingSkillLabel(area)}</td>
+        <td>${
+          area?.counting?.enabled
+            ? `ON (${getCountingSkillLabel(area)})`
+            : "-"
+        }</td>
         <td class="row-actions">
           <button type="button" class="button ghost" data-edit="${area.id}">編集</button>
           <button type="button" class="button ghost" data-up="${area.id}" ${upDisabled}>↑</button>
@@ -378,22 +468,8 @@ export function renderAreas(mount) {
       btn.addEventListener("click", () => {
         const target = areas.find((a) => a.id === btn.dataset.edit);
         if (!target) return;
-        areaForm.areaId.value = target.id;
-        areaForm.label.value = target.label;
-        areaForm.columns.value = target.columns || "";
-        areaForm.minWidth.value = target.minWidth || "";
-        areaForm.gridColumn.value = target.gridColumn || "";
-        areaForm.gridRow.value = target.gridRow || "";
-        areaForm.colSpan.value = target.colSpan || "";
-        areaForm.rowSpan.value = target.rowSpan || "";
-        if (countingEnabledInput) {
-          countingEnabledInput.checked = target.counting?.enabled === true;
-        }
-        if (countingThresholdInput) {
-          countingThresholdInput.value = target.counting?.thresholdMinutes || 120;
-        }
-        renderCountingSkillOptions(target.counting?.skillIds || []);
-        setCountingFieldState(countingEnabledInput?.checked);
+        fillAreaForm(target);
+        openDialog(areaDialog);
         areaForm.areaId.focus();
       });
     });
@@ -541,6 +617,7 @@ export function renderAreas(mount) {
     renderFloorSelect();
     updateFloorHint();
     areaForm?.reset();
+    areaForm?.areaId?.removeAttribute("readonly");
     const cached = areaCache.get(currentFloorId);
     if (cached) {
       areas = (cached.areas || []).slice();
@@ -717,12 +794,13 @@ export function renderAreas(mount) {
     }
     await persistAreas(next, index >= 0 ? "エリアを更新しました" : "エリアを追加しました");
     areaForm.reset();
+    areaForm.areaId.removeAttribute("readonly");
     resetCountingForm();
+    closeDialog(areaDialog);
   });
 
   clearAreaBtn?.addEventListener("click", () => {
-    areaForm.reset();
-    resetCountingForm();
+    fillAreaForm(null);
   });
 
   saveLayoutBtn?.addEventListener("click", async () => {
@@ -731,6 +809,16 @@ export function renderAreas(mount) {
 
   countingEnabledInput?.addEventListener("change", (e) => {
     setCountingFieldState(e.target.checked);
+  });
+
+  openFloorManagerBtn?.addEventListener("click", () => {
+    openDialog(floorDialog);
+  });
+
+  openAreaCreateBtn?.addEventListener("click", () => {
+    fillAreaForm(null);
+    openDialog(areaDialog);
+    areaForm.areaId.focus();
   });
 
   floorSelect?.addEventListener("change", (e) => {

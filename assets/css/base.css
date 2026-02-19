@@ -32,8 +32,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .right{border:1px solid var(--border)}
 .hint{font-size:12px;color:var(--muted)}
 .cards{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px;align-content:start;align-items:start}
-.card{position:relative;display:grid;grid-template-columns:minmax(24px,64px) 1fr minmax(24px,64px);align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden;z-index:1}
-.card.pool-card{grid-template-columns:minmax(16px,48px) 1fr minmax(16px,48px);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.03);font-size:calc(12px * var(--dashboard-font-scale,1))}
+.card{position:relative;display:grid;grid-template-columns:56px minmax(0,1fr) 56px;align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden;z-index:1}
+.card.pool-card{grid-template-columns:44px minmax(0,1fr) 44px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.03);font-size:calc(12px * var(--dashboard-font-scale,1))}
 .card.pool-card .card-body{padding:8px;gap:4px}
 .card.pool-card .card-name{font-size:1.1em}
 .card.pool-card .card-time{padding:3px 8px;font-size:calc(14px * var(--dashboard-font-scale,1))}
@@ -47,7 +47,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card-action{position:absolute;top:calc(6px * var(--board-scale));right:calc(6px * var(--board-scale));border:max(1px,calc(1px * var(--board-scale))) solid var(--border);background:#f8fafc;color:var(--muted);border-radius:calc(8px * var(--board-scale));padding:calc(4px * var(--board-scale)) calc(6px * var(--board-scale));font-size:calc(12px * var(--dashboard-font-scale,1));cursor:pointer;line-height:1;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility .15s ease}
 .card:hover .card-action{opacity:1;visibility:visible;pointer-events:auto}
 .card-action:hover{background:#e2e8f0;color:var(--ink)}
-.card-body{display:flex;flex-direction:column;gap:calc(6px * var(--board-scale));padding:calc(10px * var(--board-scale))}
+.card-body{display:flex;flex-direction:column;gap:calc(6px * var(--board-scale));padding:calc(10px * var(--board-scale));min-width:0}
 .card-badges{display:flex;align-items:center;gap:6px;margin-bottom:4px}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;line-height:1.2;border:1px solid var(--border);background:#f8fafc;color:var(--ink)}
 .badge-mentor{background:#2563eb;color:#fff;border-color:#1d4ed8}
@@ -148,7 +148,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card-time-note.left{border:0}
 .card-time-note.right{border:0}
 .card-location{color:var(--muted)}
-.card-meta-row{display:flex;align-items:center;gap:10px}
+.card-meta-row{display:flex;align-items:center;gap:10px;min-width:0}
 .card-meta-row .card-memo{flex:1 1 0}
 .card-memo{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .skill-column-group{display:grid;grid-template-columns:repeat(2,1fr);gap:0;align-items:stretch;justify-content:stretch;min-width:30px;height:100%}

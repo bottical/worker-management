@@ -205,7 +205,7 @@ body.is-compact .card-time-note{display:none !important}
 body.is-compact .card-memo{display:none}
 body.is-compact .employment-count{flex-direction:row;align-items:center;gap:6px;font-size:calc(11px * var(--dashboard-font-scale,1));white-space:nowrap}
 body.is-compact .employment-count .count{font-size:calc(13px * var(--dashboard-font-scale,1))}
-body.is-compact .droparea{grid-template-columns:repeat(var(--drop-columns,4), minmax(var(--drop-min-width,96px), 1fr));gap:calc(6px * var(--board-scale))}
+body.is-compact .droparea{grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:calc(6px * var(--board-scale))}
 body.is-compact .dashboard-pool-panel #pool.cards,
 body.is-compact .dashboard-pool-panel #pool.pool-compact-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px}
 body.is-compact .card[data-compact-tooltip]:hover{z-index:6;overflow:visible}

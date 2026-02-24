@@ -1,10 +1,11 @@
 import { ENV } from "../config/env.js";
+import { getJstDateString } from "./dates.js";
 
 const listeners = new Set();
 
 export const state = {
   sheetId: ENV.sheetId,
-  dateTab: new Date().toISOString().slice(0, 10),
+  dateTab: getJstDateString(),
   idColumn: ENV.idColumn,
   referenceCell: ENV.referenceCell || "A1",
   workers: [], // ["ID001", ...]
@@ -16,7 +17,7 @@ export const state = {
     siteId: ENV.defaultSite?.siteId || "",
     floorId: ENV.defaultSite?.floorId || ""
   },
-  assignmentDate: new Date().toISOString().slice(0, 10)
+  assignmentDate: getJstDateString()
 };
 
 export function set(partial) {

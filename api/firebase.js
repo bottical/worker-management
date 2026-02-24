@@ -1,5 +1,6 @@
 // api/firebase.js
 import { ENV } from "../config/env.js";
+import { getJstDateString } from "../core/dates.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
 import {
   getFirestore,
@@ -464,7 +465,7 @@ export async function createAssignment({
     timeNoteLeft: typeof timeNoteLeft === "string" ? timeNoteLeft : "",
     timeNoteRight: typeof timeNoteRight === "string" ? timeNoteRight : "",
     order: typeof order === "number" ? order : 0,
-    date: new Date().toISOString().slice(0, 10),
+    date: getJstDateString(),
     inAt: serverTimestamp(),
     outAt: null,
     createdAt: serverTimestamp(),
@@ -585,7 +586,7 @@ export async function updateAssignmentsOrder({ userId, siteId, updates }) {
 /** 在籍中（outAt=null）の購読：同一サイト/フロアのみ */
 export function subscribeActiveAssignments({ userId, siteId, floorId, date }, cb) {
   assertUserSite({ userId, siteId });
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || getJstDateString();
   const col = siteCollection(userId, siteId, "assignments");
   const filters = [where("outAt", "==", null), where("date", "==", targetDate)];
   if (floorId) {
@@ -601,7 +602,7 @@ export function subscribeActiveAssignments({ userId, siteId, floorId, date }, cb
 /** 在籍中（outAt=null）を一度だけ取得（重複IN防止用） */
 export async function getActiveAssignments({ userId, siteId, floorId, date }) {
   assertUserSite({ userId, siteId });
-  const targetDate = date || new Date().toISOString().slice(0, 10);
+  const targetDate = date || getJstDateString();
   const col = siteCollection(userId, siteId, "assignments");
   const filters = [where("outAt", "==", null), where("date", "==", targetDate)];
   if (floorId) {

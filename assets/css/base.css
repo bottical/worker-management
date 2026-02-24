@@ -197,6 +197,19 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .dashboard-pool-panel #pool{flex:1;overflow-y:auto;padding-right:4px}
 .grid.pool-hidden{grid-template-columns:1fr}
 .pool-hidden .dashboard-pool-panel{display:none}
+body.is-compact .card{min-height:0}
+body.is-compact .card .card-body{gap:calc(3px * var(--board-scale));padding:calc(6px * var(--board-scale))}
+body.is-compact .card-name{font-size:1.1em}
+body.is-compact .card-time{padding:3px 8px}
+body.is-compact .card-time-note{display:none !important}
+body.is-compact .card-memo{display:none}
+body.is-compact .employment-count{flex-direction:row;align-items:center;gap:6px;font-size:calc(11px * var(--dashboard-font-scale,1));white-space:nowrap}
+body.is-compact .employment-count .count{font-size:calc(13px * var(--dashboard-font-scale,1))}
+body.is-compact .droparea{grid-template-columns:repeat(var(--drop-columns,4), minmax(var(--drop-min-width,96px), 1fr));gap:calc(6px * var(--board-scale))}
+body.is-compact .dashboard-pool-panel #pool.cards,
+body.is-compact .dashboard-pool-panel #pool.pool-compact-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px}
+body.is-compact .card[data-compact-tooltip]:hover{z-index:6;overflow:visible}
+body.is-compact .card[data-compact-tooltip]:hover::before{content:attr(data-compact-tooltip);position:absolute;left:10px;right:10px;bottom:8px;background:rgba(15,23,42,0.95);color:#fff;font-size:12px;line-height:1.35;padding:7px 8px;border-radius:8px;white-space:normal;pointer-events:none;z-index:7;box-shadow:0 8px 20px rgba(0,0,0,0.22)}
 @media (max-width: 960px){
   .dashboard-grid{grid-template-columns:1fr}
   .dashboard-grid .panel{width:100%}

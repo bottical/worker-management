@@ -7,14 +7,7 @@ import {
   updateAssignmentTimeNotes
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
-
-function todayIso() {
-  const dt = new Date();
-  const year = dt.getFullYear();
-  const month = String(dt.getMonth() + 1).padStart(2, "0");
-  const day = String(dt.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
+import { getJstDateString } from "../core/dates.js";
 
 const OVERTIME_CANDIDATES = ["18", "19", "20", "20.5", "21", "22", "23"];
 
@@ -189,7 +182,7 @@ export function renderSearch(mount) {
   const progress = box.querySelector("#searchProgress");
   const result = box.querySelector("#searchResult");
 
-  dateInput.value = state.dateTab || todayIso();
+  dateInput.value = state.dateTab || getJstDateString();
 
   const setLoading = (loading) => {
     runBtn.disabled = loading;
@@ -238,7 +231,7 @@ export function renderSearch(mount) {
       });
 
       const searchDate = dateInput.value.trim();
-      const today = todayIso();
+      const today = getJstDateString();
       let latestAssignment = null;
       let overtimeMessage = "";
 

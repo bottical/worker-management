@@ -19,6 +19,7 @@ import {
   recordSkillEmploymentCount
 } from "../api/firebase.js";
 import { toast } from "../core/ui.js";
+import { getJstDateString } from "../core/dates.js";
 import {
   normalizeSkillEmploymentCounts,
   normalizeSkillLevels
@@ -35,14 +36,9 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getJstTodayString() {
-  const now = new Date();
-  const jst = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-  return jst.toISOString().slice(0, 10);
-}
 
 export function renderDashboard(mount) {
-  const todayStr = getJstTodayString();
+  const todayStr = getJstDateString();
   let selectedDate = state.assignmentDate || todayStr;
   let isReadOnly = selectedDate !== todayStr;
   let skillSettings = DEFAULT_SKILL_SETTINGS;
@@ -621,7 +617,7 @@ export function renderDashboard(mount) {
 
   async function runSkillEmploymentCountCheck() {
     if (isReadOnly) return;
-    const dateKey = new Date().toISOString().slice(0, 10);
+    const dateKey = getJstDateString();
     const now = Date.now();
     const areaLookup = new Map(
       areaList.map((area) => [`${area.floorId || ""}__${area.id}`, area])

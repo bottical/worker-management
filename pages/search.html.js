@@ -93,11 +93,18 @@ function buildOvertimeValueUI({ assignment, container, onSaved }) {
   const input = container.querySelector(".search-overtime-input");
   const saveBtn = container.querySelector(".search-overtime-save");
   const adjustButtons = Array.from(container.querySelectorAll("[data-adjust]"));
+  const valueButtons = Array.from(container.querySelectorAll("[data-value]"));
 
   const setInputValue = (value) => {
-    input.value = value;
-    currentLabel.textContent = value || "未設定";
-    const numeric = parseHalfHourValue(value);
+    const normalizedValue = typeof value === "string" ? value.trim() : "";
+    input.value = normalizedValue;
+    currentLabel.textContent = normalizedValue || "未設定";
+    valueButtons.forEach((btn) => {
+      const isActive = (btn.dataset.value || "") === normalizedValue;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+    const numeric = parseHalfHourValue(normalizedValue);
     adjustButtons.forEach((btn) => {
       btn.disabled = numeric === null;
     });
@@ -140,7 +147,7 @@ function buildOvertimeValueUI({ assignment, container, onSaved }) {
         timeNoteLeft: typeof assignment.timeNoteLeft === "string" ? assignment.timeNoteLeft : "",
         timeNoteRight: payload
       });
-      toast("Saved", "success");
+      toast("登録が完了しました", "success");
       onSaved?.();
       setInputValue(payload);
     } catch (err) {
@@ -156,6 +163,10 @@ function buildOvertimeValueUI({ assignment, container, onSaved }) {
       event.preventDefault();
       saveBtn.click();
     }
+  });
+
+  input.addEventListener("input", () => {
+    setInputValue(input.value);
   });
 
   const firstCandidate = container.querySelector(".search-overtime-pick");

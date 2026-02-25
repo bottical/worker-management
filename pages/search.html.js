@@ -16,7 +16,7 @@ function todayIso() {
   return `${year}-${month}-${day}`;
 }
 
-const OVERTIME_CANDIDATES = ["18", "19", "20", "20.5", "21", "22", "23"];
+const OVERTIME_CANDIDATES = ["18", "18.5", "19.5", "20", "20.5", "21", "21.5", "22"];
 
 function timestampToMillis(ts) {
   if (!ts) return 0;

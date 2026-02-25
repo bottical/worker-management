@@ -229,6 +229,7 @@ export function renderDashboard(mount) {
             .map((w) => [w.workerId, w])
         )
       : new Map();
+  let rosterAliases = new Map();
   let workerMap = new Map(masterWorkerMap);
   let floorList = DEFAULT_FLOORS.slice();
   let showFallback = true;
@@ -343,13 +344,15 @@ export function renderDashboard(mount) {
     const rosterByFloor = Array.from(rosterEntries.values()).filter(
       (entry) => (entry.floorId || "") === resolvedFloorId
     );
+    const aliases = rosterAliases.get(resolvedFloorId) || {};
     try {
       await saveDailyRoster({
         userId: state.site.userId,
         siteId: state.site.siteId,
         floorId: resolvedFloorId,
         date: selectedDate,
-        workers: rosterByFloor
+        workers: rosterByFloor,
+        aliases
       });
       floorApi.setMentorshipMap(buildMentorshipMap());
       reconcile();
@@ -742,19 +745,22 @@ export function renderDashboard(mount) {
       : (state.site.floorId ? [state.site.floorId] : []);
     if (!targets.length) {
       rosterEntries = new Map();
+      rosterAliases = new Map();
       reconcile();
       return;
     }
     const combined = new Map();
+    const aliasByFloor = new Map();
     await Promise.all(
       targets.map(async (floorId) => {
         try {
-          const { workers } = await getDailyRoster({
+          const { workers, aliases } = await getDailyRoster({
             userId: state.site.userId,
             siteId: state.site.siteId,
             floorId,
             date: dateStr
           });
+          aliasByFloor.set(floorId, aliases && typeof aliases === "object" ? aliases : {});
           (workers || [])
             .map((row) => toRosterEntry(row, floorId))
             .filter((w) => w && w.workerId)
@@ -766,10 +772,12 @@ export function renderDashboard(mount) {
         } catch (err) {
           console.error("getDailyRoster failed", err);
           toast("作業者リストの取得に失敗しました", "error");
+          aliasByFloor.set(floorId, {});
         }
       })
     );
     rosterEntries = combined;
+    rosterAliases = aliasByFloor;
     reconcile();
   }
 

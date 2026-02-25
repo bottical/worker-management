@@ -63,7 +63,7 @@ function pickLatestAssignment(assignments, workerId) {
     })[0];
 }
 
-function buildOvertimeValueUI({ assignment, container, codeInput }) {
+function buildOvertimeValueUI({ assignment, container, onSaved }) {
   const currentValue =
     typeof assignment?.timeNoteRight === "string" ? assignment.timeNoteRight.trim() : "";
   container.innerHTML = `
@@ -84,7 +84,7 @@ function buildOvertimeValueUI({ assignment, container, codeInput }) {
       </div>
       <div class="search-overtime-input-row">
         <input type="text" inputmode="decimal" step="0.5" placeholder="値を入力" class="search-overtime-input" />
-        <button type="button" class="button search-overtime-save">OK</button>
+        <button type="button" class="button search-overtime-save">登録</button>
       </div>
     </div>
   `;
@@ -141,8 +141,7 @@ function buildOvertimeValueUI({ assignment, container, codeInput }) {
         timeNoteRight: payload
       });
       toast("Saved", "success");
-      codeInput.value = "";
-      codeInput.focus();
+      onSaved?.();
       setInputValue(payload);
     } catch (err) {
       console.error("[Search] overtime save failed", err);
@@ -188,6 +187,14 @@ export function renderSearch(mount) {
   const runBtn = box.querySelector("#searchRun");
   const progress = box.querySelector("#searchProgress");
   const result = box.querySelector("#searchResult");
+
+  const focusSearchCode = () => {
+    codeInput.value = "";
+    requestAnimationFrame(() => {
+      codeInput.focus();
+      codeInput.select();
+    });
+  };
 
   dateInput.value = state.dateTab || todayIso();
 
@@ -279,7 +286,7 @@ export function renderSearch(mount) {
       if (!latestAssignment) {
         overtimeMount.innerHTML = `<div class="search-overtime search-overtime-disabled hint">${overtimeMessage}</div>`;
       } else {
-        buildOvertimeValueUI({ assignment: latestAssignment, container: overtimeMount, codeInput });
+        buildOvertimeValueUI({ assignment: latestAssignment, container: overtimeMount, onSaved: focusSearchCode });
       }
     } catch (err) {
       console.error("[Search] resolve failed", err);
@@ -290,6 +297,15 @@ export function renderSearch(mount) {
       setLoading(false);
     }
   });
+
+  const runSearchByEnter = (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    runBtn.click();
+  };
+
+  dateInput.addEventListener("keydown", runSearchByEnter);
+  codeInput.addEventListener("keydown", runSearchByEnter);
 
   codeInput.focus();
 }

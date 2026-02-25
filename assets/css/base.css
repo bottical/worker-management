@@ -212,6 +212,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .search-overtime-input-row{display:flex;gap:8px;margin-top:10px}
 .search-overtime-input{flex:1 1 auto;min-height:56px;font-size:18px;padding:10px 12px;border-radius:10px;border:1px solid var(--border)}
 .search-overtime .button{min-height:56px;font-size:18px;padding:12px 14px}
+.search-overtime-save{min-width:120px;padding-inline:20px;font-weight:700}
 .search-overtime-done{background:#0f766e;border-color:#0f766e;color:#fff}
 .search-overtime-disabled{background:#f1f5f9;color:var(--muted)}
 @media (max-width: 960px){

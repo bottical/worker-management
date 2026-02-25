@@ -407,7 +407,7 @@ export function makeFloor(
     header.className = "card-header";
 
     const name = document.createElement("div");
-    name.className = "card-name";
+    name.className = "card-name card-chip";
     name.textContent = info.name;
     header.appendChild(name);
 
@@ -415,9 +415,9 @@ export function makeFloor(
     timeRow.className = "card-time-row";
 
     const leftNote = document.createElement("span");
-    leftNote.className = "card-time-note left";
+    leftNote.className = "card-time-note left card-chip";
     const rightNote = document.createElement("span");
-    rightNote.className = "card-time-note right";
+    rightNote.className = "card-time-note right card-chip";
 
     const time = document.createElement("div");
     time.className = "card-time";

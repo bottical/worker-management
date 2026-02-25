@@ -35,7 +35,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card{position:relative;display:grid;grid-template-columns:56px minmax(0,1fr) 56px;align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden;z-index:1}
 .card.pool-card{grid-template-columns:44px minmax(0,1fr) 44px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.03);font-size:calc(12px * var(--dashboard-font-scale,1))}
 .card.pool-card .card-body{padding:8px;gap:4px}
-.card.pool-card .card-name{font-size:1.1em}
+.card.pool-card .card-name{font-size:2.25em}
 .card.pool-card .card-time{padding:3px 8px;font-size:calc(14px * var(--dashboard-font-scale,1))}
 .card.pool-card .employment-count{font-size:calc(10px * var(--dashboard-font-scale,1))}
 .card.pool-card .employment-count .count{font-size:calc(14px * var(--dashboard-font-scale,1))}
@@ -200,6 +200,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 body.is-compact .card{min-height:0}
 body.is-compact .card .card-body{gap:calc(3px * var(--board-scale));padding:calc(6px * var(--board-scale))}
 body.is-compact .card-name{font-size:1.1em}
+body.is-compact .card.pool-card .card-name{font-size:1.83em}
 body.is-compact .card-time{padding:3px 8px}
 body.is-compact .card-time-note{display:none !important}
 body.is-compact .card-memo{display:none}

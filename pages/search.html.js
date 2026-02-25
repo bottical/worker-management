@@ -270,9 +270,11 @@ export function renderSearch(mount) {
 
       result.innerHTML = `
         <div class="panel" style="margin-top:12px">
-          <h3>検索結果</h3>
-          <p style="margin-top:8px"><strong>${name}</strong> ${company}</p>
-          <p class="hint" style="margin-top:4px">ID: ${workerId}</p>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px">
+            <h3 style="margin:0">検索結果</h3>
+            <p style="margin:0"><strong>${name}</strong> ${company}</p>
+            <p class="hint" style="margin:0">ID: ${workerId}</p>
+          </div>
           <div id="searchOvertimeMount" style="margin-top:12px"></div>
           <div class="form-actions" style="margin-top:12px;gap:8px">
             <a class="button" href="#/users">設定画面へ</a>

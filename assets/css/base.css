@@ -32,7 +32,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .right{border:1px solid var(--border)}
 .hint{font-size:12px;color:var(--muted)}
 .cards{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px;align-content:start;align-items:start}
-.card{--_scale:var(--card-scale,var(--board-scale,1));--chip-font:18px;--chip-line:1.2;--chip-pad-x:10px;--chip-pad-y:4px;--chip-radius:10px;--chip-min-w:2.2em;--chip-max-w:8.5em;position:relative;display:grid;grid-template-columns:56px minmax(0,1fr) 56px;align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden;z-index:1}
+.card{position:relative;display:grid;grid-template-columns:56px minmax(0,1fr) 56px;align-items:stretch;gap:0;padding:0;border:1px solid var(--card-accent,var(--border));border-radius:12px;background:#fff;cursor:grab;box-shadow:0 4px 12px rgba(0,0,0,0.04);overflow:hidden;z-index:1}
 .card.pool-card{grid-template-columns:44px minmax(0,1fr) 44px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.03);font-size:calc(12px * var(--dashboard-font-scale,1))}
 .card.pool-card .card-body{padding:8px;gap:4px}
 .card.pool-card .card-name{font-size:1.1em}
@@ -139,13 +139,12 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .card[data-education-hint]:not(.readonly):hover{box-shadow:0 6px 14px rgba(37,99,235,0.18)}
 .card[data-education-hint]:not(.readonly):hover::after{content:attr(data-education-hint);position:absolute;left:12px;right:12px;bottom:12px;z-index:2;background:rgba(37,99,235,0.92);color:#fff;font-size:12px;line-height:1.4;padding:8px 10px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.18)}
 .card-header{display:flex;align-items:center;gap:8px;justify-content:center}
-.card-chip{font-size:calc(var(--chip-font) * var(--_scale));line-height:calc(var(--chip-line) * var(--_scale));padding:calc(var(--chip-pad-y) * var(--_scale)) calc(var(--chip-pad-x) * var(--_scale));border-radius:calc(var(--chip-radius) * var(--_scale));min-width:calc(var(--chip-min-w) * var(--_scale));max-width:calc(var(--chip-max-w) * var(--_scale));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff;border:max(1px,calc(1px * var(--_scale))) solid var(--border);color:var(--ink);display:inline-flex;align-items:center;justify-content:center;text-align:center}
-.card-name{font-weight:1000;min-width:0;text-align:center;flex:0 1 auto}
+.card-name{font-weight:1000;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;flex:0 1 auto;font-size:1.35em;line-height:1.2}
 .employment-count{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:calc(12px * var(--dashboard-font-scale,1));color:var(--muted);justify-content:flex-end}
 .employment-count .count{font-size:calc(18px * var(--dashboard-font-scale,1));font-weight:700;color:var(--ink)}
 .card-time{align-self:center;padding:4px 10px;border-radius:10px;background:#fff;color:#92400e;font-weight:700;text-align:center}
-.card-time-row{display:flex;align-items:center;justify-content:center;gap:calc(6px * var(--_scale));min-width:0;flex-wrap:nowrap}
-.card-time-note{font-weight:1000;color:var(--ink);flex:0 1 auto}
+.card-time-row{display:flex;align-items:center;justify-content:center;gap:6px}
+.card-time-note{font-weight:700;color:#FF0000;font-size:32px;min-width:1.5em;text-align:center}
 .card-time-note.left{border:0}
 .card-time-note.right{border:0}
 .card-location{color:var(--muted)}
@@ -198,19 +197,6 @@ body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui,-app
 .dashboard-pool-panel #pool{flex:1;overflow-y:auto;padding-right:4px}
 .grid.pool-hidden{grid-template-columns:1fr}
 .pool-hidden .dashboard-pool-panel{display:none}
-body.is-compact .card{min-height:0}
-body.is-compact .card .card-body{gap:calc(3px * var(--board-scale));padding:calc(6px * var(--board-scale))}
-body.is-compact .card-name{font-size:1.1em}
-body.is-compact .card-time{padding:3px 8px}
-body.is-compact .card-time-note{display:none !important}
-body.is-compact .card-memo{display:none}
-body.is-compact .employment-count{flex-direction:row;align-items:center;gap:6px;font-size:calc(11px * var(--dashboard-font-scale,1));white-space:nowrap}
-body.is-compact .employment-count .count{font-size:calc(13px * var(--dashboard-font-scale,1))}
-body.is-compact .droparea{grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:calc(6px * var(--board-scale))}
-body.is-compact .dashboard-pool-panel #pool.cards,
-body.is-compact .dashboard-pool-panel #pool.pool-compact-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px}
-body.is-compact .card[data-compact-tooltip]:hover{z-index:6;overflow:visible}
-body.is-compact .card[data-compact-tooltip]:hover::before{content:attr(data-compact-tooltip);position:absolute;left:10px;right:10px;bottom:8px;background:rgba(15,23,42,0.95);color:#fff;font-size:12px;line-height:1.35;padding:7px 8px;border-radius:8px;white-space:normal;pointer-events:none;z-index:7;box-shadow:0 8px 20px rgba(0,0,0,0.22)}
 @media (max-width: 960px){
   .dashboard-grid{grid-template-columns:1fr}
   .dashboard-grid .panel{width:100%}

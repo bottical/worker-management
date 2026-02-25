@@ -29,20 +29,13 @@ const SKILL_COUNT_INTERVAL_MS = 60000;
 const CARD_SCALE_STORAGE_KEY = "wm:dashboard:cardScale";
 const CARD_SCALE_MIN = 0.6;
 const CARD_SCALE_MAX = 1.4;
-const COMPACT_MODE_STORAGE_KEY = "wm:dashboard:compactMode";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getJstTodayString() {
-  const now = new Date();
-  const jst = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-  return jst.toISOString().slice(0, 10);
-}
-
 export function renderDashboard(mount) {
-  const todayStr = getJstTodayString();
+  const todayStr = new Date().toISOString().slice(0, 10);
   let selectedDate = state.assignmentDate || todayStr;
   let isReadOnly = selectedDate !== todayStr;
   let skillSettings = DEFAULT_SKILL_SETTINGS;
@@ -87,10 +80,6 @@ export function renderDashboard(mount) {
       />
       <span id="cardScaleValue">100%</span>
     </label>
-    <label class="toggle-compact-mode">
-      <input type="checkbox" id="compactModeToggle" />
-      コンパクトモード
-    </label>
     <button type="button" id="toggleFallback" class="toggle-pool" aria-pressed="true" title="未配置カラムを非表示">
       <span class="icon" aria-hidden="true">≡</span>
       <span class="label">未配置カラム</span>
@@ -109,7 +98,6 @@ export function renderDashboard(mount) {
   const floorSelect = toolbar.querySelector("#floorSelect");
   const cardScaleSlider = toolbar.querySelector("#cardScaleSlider");
   const cardScaleValue = toolbar.querySelector("#cardScaleValue");
-  const compactModeToggle = toolbar.querySelector("#compactModeToggle");
   const fallbackToggle = toolbar.querySelector("#toggleFallback");
   const viewModeEl = toolbar.querySelector("#viewMode");
 
@@ -131,18 +119,6 @@ export function renderDashboard(mount) {
     cardScaleValue.textContent = `${Math.round(value * 100)}%`;
     localStorage.setItem(CARD_SCALE_STORAGE_KEY, String(value));
   });
-
-  let compactMode = localStorage.getItem(COMPACT_MODE_STORAGE_KEY) === "true";
-  document.body.classList.toggle("is-compact", compactMode);
-  if (compactModeToggle) {
-    compactModeToggle.checked = compactMode;
-    compactModeToggle.addEventListener("change", (event) => {
-      compactMode = Boolean(event.target.checked);
-      document.body.classList.toggle("is-compact", compactMode);
-      localStorage.setItem(COMPACT_MODE_STORAGE_KEY, compactMode ? "true" : "false");
-      reconcile();
-    });
-  }
 
   function toWorkerMaster(row) {
     if (!row) return null;
@@ -519,7 +495,6 @@ export function renderDashboard(mount) {
     // プール（未配置= roster ー assigned）
     const rosterWorkers = rosterWorkersForPool();
     const notAssigned = rosterWorkers.filter((w) => !assignedAll.has(w.workerId));
-    poolEl.classList.toggle("pool-compact-grid", compactMode);
     drawPool(poolEl, notAssigned, {
       readOnly: isReadOnly,
       onEditWorker: openWorkerEditor,

@@ -75,7 +75,7 @@ function buildCardBody(worker, currentDate) {
   header.className = "card-header";
 
   const name = document.createElement("div");
-  name.className = "card-name card-chip";
+  name.className = "card-name";
   name.textContent = worker.name || worker.workerId || "?";
   header.appendChild(name);
 
@@ -86,8 +86,7 @@ function buildCardBody(worker, currentDate) {
 
   const memo = document.createElement("div");
   memo.className = "card-memo hint";
-  const normalizedMemo = typeof worker.memo === "string" ? worker.memo.trim() : "";
-  memo.textContent = normalizedMemo ? `備考: ${normalizedMemo}` : "備考: -";
+  memo.textContent = worker.memo ? `備考: ${worker.memo}` : "備考: -";
 
   const lastWork = document.createElement("div");
   lastWork.className = "employment-count";
@@ -101,17 +100,6 @@ function buildCardBody(worker, currentDate) {
   metaRow.className = "card-meta-row";
   metaRow.appendChild(memo);
   metaRow.appendChild(lastWork);
-
-  const compactTooltip = [
-    normalizedMemo ? `備考: ${normalizedMemo}` : "",
-    formattedDate ? `最終作業日: ${formattedDate}` : "最終作業日: -"
-  ]
-    .filter(Boolean)
-    .join("\n");
-  if (compactTooltip) {
-    body.dataset.compactTooltip = compactTooltip;
-    body.title = compactTooltip;
-  }
 
   body.appendChild(header);
   body.appendChild(time);
@@ -140,10 +128,6 @@ function card(worker, readOnly, onEditWorker, skillSettings, currentDate) {
     normalizeSkillEmploymentCounts(worker.skillEmploymentCounts)
   );
   const body = buildCardBody(worker, currentDate);
-  if (body.dataset.compactTooltip) {
-    el.dataset.compactTooltip = body.dataset.compactTooltip;
-    el.title = body.dataset.compactTooltip;
-  }
 
   const settingsBtn = document.createElement("button");
   settingsBtn.type = "button";

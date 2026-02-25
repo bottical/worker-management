@@ -407,7 +407,7 @@ export function makeFloor(
     header.className = "card-header";
 
     const name = document.createElement("div");
-    name.className = "card-name card-chip";
+    name.className = "card-name";
     name.textContent = info.name;
     header.appendChild(name);
 
@@ -415,9 +415,9 @@ export function makeFloor(
     timeRow.className = "card-time-row";
 
     const leftNote = document.createElement("span");
-    leftNote.className = "card-time-note left card-chip";
+    leftNote.className = "card-time-note left";
     const rightNote = document.createElement("span");
-    rightNote.className = "card-time-note right card-chip";
+    rightNote.className = "card-time-note right";
 
     const time = document.createElement("div");
     time.className = "card-time";
@@ -456,7 +456,7 @@ export function makeFloor(
 
     const memo = document.createElement("div");
     memo.className = "card-memo hint";
-    const normalizedMemo = typeof info.memo === "string" ? info.memo.trim() : "";
+    const normalizedMemo = typeof info.memo === "string" ? info.memo : "";
     const truncatedMemo =
       normalizedMemo.length > 5 ? `${normalizedMemo.slice(0, 5)}...` : normalizedMemo;
     memo.textContent = truncatedMemo ? `備考: ${truncatedMemo}` : "備考: -";
@@ -473,17 +473,6 @@ export function makeFloor(
     metaRow.className = "card-meta-row";
     metaRow.appendChild(memo);
     metaRow.appendChild(lastWork);
-
-    const compactTooltip = [
-      normalizedMemo ? `備考: ${normalizedMemo}` : "",
-      formattedDate ? `最終作業日: ${formattedDate}` : "最終作業日: -"
-    ]
-      .filter(Boolean)
-      .join("\n");
-    if (compactTooltip) {
-      body.dataset.compactTooltip = compactTooltip;
-      body.title = compactTooltip;
-    }
 
     body.appendChild(header);
     body.appendChild(timeRow);
@@ -532,12 +521,6 @@ export function makeFloor(
       normalizeSkillEmploymentCounts(info.skillEmploymentCounts)
     );
     const body = buildCardBody(info, areaId, floorId, timeNotes);
-    if (body.dataset.compactTooltip) {
-      card.dataset.compactTooltip = body.dataset.compactTooltip;
-      card.title = card.title
-        ? `${card.title}\n${body.dataset.compactTooltip}`
-        : body.dataset.compactTooltip;
-    }
 
     let detachBtn = null;
     if (role === "mentee") {
@@ -1613,11 +1596,7 @@ export function makeFloor(
 
   function getDropColumns(area) {
     const columns = extractDropColumns(area);
-    const base = columns || 2;
-    if (typeof document !== "undefined" && document.body?.classList.contains("is-compact")) {
-      return Math.max(4, base);
-    }
-    return base;
+    return columns || 2;
   }
 
   function getDropMinWidth(area) {

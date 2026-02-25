@@ -75,7 +75,7 @@ function buildCardBody(worker, currentDate) {
   header.className = "card-header";
 
   const name = document.createElement("div");
-  name.className = "card-name";
+  name.className = "card-name card-chip";
   name.textContent = worker.name || worker.workerId || "?";
   header.appendChild(name);
 
